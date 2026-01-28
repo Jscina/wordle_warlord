@@ -81,13 +81,6 @@ pub fn matches(word: &str, guess: &str, pattern: &[Feedback]) -> bool {
 
     let mut min_counts: HashMap<char, usize> = HashMap::new();
     let mut max_counts: HashMap<char, usize> = HashMap::new();
-    let mut guess_counts: HashMap<char, usize> = HashMap::new();
-
-    // Count letters in the guess
-    for &c in &g {
-        *guess_counts.entry(c).or_insert(0) += 1;
-    }
-
     // Green + Yellow pass (position + minimum counts)
     for i in 0..w.len() {
         match pattern[i] {
@@ -108,10 +101,9 @@ pub fn matches(word: &str, guess: &str, pattern: &[Feedback]) -> bool {
     }
 
     // Gray pass (establish max counts PER LETTER)
-    for (&letter, &guess_count) in &guess_counts {
+    for &letter in g.iter() {
         let min = *min_counts.get(&letter).unwrap_or(&0);
 
-        // If any instance of this letter is gray, max = min
         let has_gray = g
             .iter()
             .zip(pattern.iter())
@@ -119,9 +111,6 @@ pub fn matches(word: &str, guess: &str, pattern: &[Feedback]) -> bool {
 
         if has_gray {
             max_counts.insert(letter, min);
-        } else {
-            // Otherwise, allow up to guess_count (or unbounded)
-            max_counts.insert(letter, usize::MAX);
         }
     }
 
