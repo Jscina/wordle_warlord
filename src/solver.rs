@@ -45,6 +45,14 @@ impl SolverState {
         &self.guesses
     }
 
+    pub fn pop_guess(&mut self) {
+        self.guesses.pop();
+    }
+
+    pub fn word_len(&self) -> usize {
+        self.word_len
+    }
+
     pub fn add_guess(&mut self, word: String, feedback: Vec<Feedback>) {
         assert_eq!(word.len(), self.word_len);
         assert_eq!(feedback.len(), self.word_len);
