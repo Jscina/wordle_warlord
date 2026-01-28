@@ -41,6 +41,10 @@ impl SolverState {
         }
     }
 
+    pub fn guesses(&self) -> &[Guess] {
+        &self.guesses
+    }
+
     pub fn add_guess(&mut self, word: String, feedback: Vec<Feedback>) {
         assert_eq!(word.len(), self.word_len);
         assert_eq!(feedback.len(), self.word_len);
@@ -76,8 +80,15 @@ pub fn matches(word: &str, guess: &str, pattern: &[Feedback]) -> bool {
     let g: Vec<char> = guess.chars().collect();
 
     let mut min_counts: HashMap<char, usize> = HashMap::new();
+    let mut max_counts: HashMap<char, usize> = HashMap::new();
+    let mut guess_counts: HashMap<char, usize> = HashMap::new();
 
-    // Green + Yellow pass
+    // Count letters in the guess
+    for &c in &g {
+        *guess_counts.entry(c).or_insert(0) += 1;
+    }
+
+    // Green + Yellow pass (position + minimum counts)
     for i in 0..w.len() {
         match pattern[i] {
             Feedback::Green => {
@@ -87,7 +98,7 @@ pub fn matches(word: &str, guess: &str, pattern: &[Feedback]) -> bool {
                 *min_counts.entry(g[i]).or_insert(0) += 1;
             }
             Feedback::Yellow => {
-                if w[i] == g[i] || !w.contains(&g[i]) {
+                if w[i] == g[i] {
                     return false;
                 }
                 *min_counts.entry(g[i]).or_insert(0) += 1;
@@ -96,16 +107,41 @@ pub fn matches(word: &str, guess: &str, pattern: &[Feedback]) -> bool {
         }
     }
 
-    // Gray pass
-    for i in 0..w.len() {
-        if pattern[i] == Feedback::Gray {
-            let letter = g[i];
-            let required = *min_counts.get(&letter).unwrap_or(&0);
-            let actual = w.iter().filter(|&&c| c == letter).count();
+    // Gray pass (establish max counts PER LETTER)
+    for (&letter, &guess_count) in &guess_counts {
+        let min = *min_counts.get(&letter).unwrap_or(&0);
 
-            if actual > required {
-                return false;
-            }
+        // If any instance of this letter is gray, max = min
+        let has_gray = g
+            .iter()
+            .zip(pattern.iter())
+            .any(|(&c, &fb)| c == letter && fb == Feedback::Gray);
+
+        if has_gray {
+            max_counts.insert(letter, min);
+        } else {
+            // Otherwise, allow up to guess_count (or unbounded)
+            max_counts.insert(letter, usize::MAX);
+        }
+    }
+
+    // Count actual letters in the candidate word
+    let mut actual_counts: HashMap<char, usize> = HashMap::new();
+    for &c in &w {
+        *actual_counts.entry(c).or_insert(0) += 1;
+    }
+
+    // Enforce min constraints
+    for (&letter, &min) in &min_counts {
+        if actual_counts.get(&letter).unwrap_or(&0) < &min {
+            return false;
+        }
+    }
+
+    // Enforce max constraints
+    for (&letter, &max) in &max_counts {
+        if actual_counts.get(&letter).unwrap_or(&0) > &max {
+            return false;
         }
     }
 
@@ -123,6 +159,98 @@ pub fn filter_words<'a>(words: &'a [String], guess: &str, pattern: &[Feedback]) 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_solver_state_multiple_guesses_compound() {
+        let words = vec![
+            "dusky".to_string(),
+            "dusty".to_string(),
+            "dumpy".to_string(),
+            "daisy".to_string(),
+        ];
+
+        let mut state = SolverState::new(5);
+
+        // DAISY → GXXYG
+        state.add_guess("daisy".to_string(), feedback_vec(&[2, 0, 0, 1, 2]));
+
+        let remaining = state.filter(&words);
+        assert_eq!(remaining.len(), 2);
+
+        // DUSTY → GGXGG
+        // S now gray → max S = 0
+        state.add_guess("dusty".to_string(), feedback_vec(&[2, 2, 0, 2, 2]));
+
+        let remaining = state.filter(&words);
+        assert!(remaining.is_empty());
+    }
+
+    #[test]
+    fn test_yellow_letter_wrong_position() {
+        let words = vec![
+            "crate".to_string(),
+            "trace".to_string(),
+            "react".to_string(),
+        ];
+
+        let guess = "crate";
+        let pattern = feedback_vec(&[
+            0, // C gray
+            1, // R yellow
+            0, // A gray
+            0, // T gray
+            0, // E gray
+        ]);
+
+        let filtered = filter_words(&words, guess, &pattern);
+
+        // All candidates violate gray constraints
+        assert!(filtered.is_empty());
+    }
+
+    #[test]
+    fn test_green_overrides_gray_elsewhere() {
+        let words = vec![
+            "sassy".to_string(),
+            "gassy".to_string(),
+            "class".to_string(),
+        ];
+
+        let guess = "sassy";
+        let pattern = feedback_vec(&[
+            2, // S green
+            0, // A gray
+            0, // S gray
+            0, // S gray
+            2, // Y green
+        ]);
+
+        let filtered = filter_words(&words, guess, &pattern);
+
+        assert!(filtered.is_empty());
+    }
+
+    #[test]
+    fn test_repeated_letter_gray_respects_min_count() {
+        let words = vec![
+            "label".to_string(),
+            "cello".to_string(),
+            "helot".to_string(),
+            "pilot".to_string(),
+        ];
+
+        let guess = "allot";
+        let pattern = feedback_vec(&[
+            0, // A gray
+            1, // L yellow
+            0, // L gray
+            0, // O gray
+            0, // T gray
+        ]);
+
+        let filtered = filter_words(&words, guess, &pattern);
+        assert!(filtered.is_empty());
+    }
 
     fn feedback_vec(pattern: &[u8]) -> Vec<Feedback> {
         pattern

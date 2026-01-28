@@ -50,7 +50,7 @@ mod tests {
 
     #[test]
     fn test_score_and_sort_unique_letters() {
-        let words = vec![String::from("abcde"), String::from("aaaaa")];
+        let words = [String::from("abcde"), String::from("aaaaa")];
         let word_refs: Vec<&String> = words.iter().collect();
         let scored = score_and_sort(&word_refs);
 
