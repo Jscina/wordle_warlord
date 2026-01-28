@@ -1,103 +1,160 @@
 # wordle-grep 🟩🟨⬛
 
-A fast, no-BS Wordle helper written in Rust.
+A Wordle solver written in Rust, with an interactive terminal UI.
 
-`wordle-grep` filters and ranks possible Wordle answers based on a guess and a feedback pattern (`G`, `Y`, `X`). It respects **actual Wordle rules** (yes, including repeated letters) and sorts results by letter frequency so you’re not eyeballing a raw list like an animal.
+`wordle-grep` models _actual_ Wordle rules — including repeated letters, per-guess min/max constraints, and multi-guess compounding and surfaces the remaining solution space as it collapses.
 
-If you’ve ever thought “I could just grep this,” this is that — but done correctly.
+This started as “I could just grep this” and turned into “okay, let’s do it properly.”
+
+---
+
+## What This Is (and Isn’t)
+
+**This is:**
+
+- A Wordle solver engine with real semantics
+- A stateful, interactive terminal UI
+- Deterministic, test-backed logic
+- Honest about contradictions (empty results mean _you’re dead_)
+
+If the solver says “no solutions,” that’s not a bug that’s Wordle telling you you fucked up earlier.
+
+---
 
 ## Features
 
-* Proper Wordle constraint handling
+- **Correct Wordle constraint handling**
+  - Green / Yellow establish **minimum letter counts**
+  - Gray establishes **maximum letter counts per guess**
+  - Repeated-letter edge cases handled correctly
 
-  * `G` = correct letter, correct position
-  * `Y` = correct letter, wrong position
-  * `X` = letter excluded *unless required elsewhere*
-* Automatic wordlist download (cached locally)
-* Clap-based CLI (because we have standards)
-* Frequency-based sorting of candidates
-* Fast enough to spam between guesses without thinking
+- **Stateful solving**
+  - Constraints accumulate across guesses
+  - Later guesses can retroactively invalidate earlier assumptions (as in real Wordle)
+
+- **Interactive terminal UI**
+  - Colored tiles (🟩🟨⬛ vibes)
+  - Live candidate narrowing
+  - Immediate visibility into forced states
+
+- **Frequency-based suggestion ranking**
+  - Scores candidates by informational value
+  - No double-letter inflation
+
+- **Test-backed solver**
+  - Repeated-letter cases
+  - Multi-guess compounding
+  - Known failure modes covered
+
+---
 
 ## Installation
 
-Clone the repo and build it like a normal Rust project:
+Clone and build like a normal Rust app:
 
-```
+```bash
 git clone https://github.com/yourname/wordle-grep
 cd wordle-grep
 cargo build --release
 ```
 
-Or just run it directly:
+Or just run it:
 
-```
-cargo run -- <guess> <pattern>
+```bash
+cargo run
 ```
 
-On first run, it will download a standard Wordle wordlist and cache it as `words.txt`.
+On first launch, it will download and cache a standard Wordle wordlist automatically.
+
+---
 
 ## Usage
 
-Basic invocation:
+When you run it:
 
-```
-wordle-grep <guess> <pattern>
-```
-
-Example:
-
-```
-wordle-grep crane GXXYX
+```bash
+cargo run
 ```
 
-Output looks like:
+You get an interactive session where you:
 
-```
-irone (312)
-satel (298)
-crone (291)
-```
+1. Enter guesses as:
 
-Higher scores mean the word contains letters that appear more frequently across remaining candidates. Start from the top unless you enjoy wasting guesses.
+   ```
+   <guess> <pattern>
+   ```
+
+   Example:
+
+   ```
+   daisy GXXYG
+   ```
+
+2. The solver updates immediately:
+   - Guesses render as colored tiles
+   - Remaining candidates update live
+   - Suggestions are ranked by usefulness
+
+3. Repeat until:
+   - You win
+   - Or the solver correctly tells you there is no valid solution
 
 ### Pattern Rules
 
-* `G` — green: letter must match exactly at this position
-* `Y` — yellow: letter must exist elsewhere, but **not here**
-* `X` — gray: letter must not appear **beyond what’s already required**
+- `G` — green: correct letter, correct position
+- `Y` — yellow: letter exists, wrong position
+- `X` — gray: letter does **not** appear beyond what’s already justified in that guess
 
-This is **not** naive grep logic. Repeated-letter edge cases are handled correctly.
+Lowercase patterns are accepted.
 
-## How Scoring Works
+---
 
-1. Count how often each letter appears across all remaining valid candidates
-2. Score each word by summing the frequencies of its **unique letters**
+## How Suggestions Are Scored
+
+1. Count how often each letter appears across the remaining valid candidates
+2. Score each candidate by the **sum of its unique letter frequencies**
 3. Sort descending
 
-Why unique letters? Because double letters don’t magically give you more information, and pretending otherwise is cope.
+Why unique letters?
+Because repeating letters doesn’t give you new information, and pretending otherwise is cope.
+
+---
 
 ## Wordlist
 
-The default wordlist is downloaded automatically from a public Wordle list and cached locally. All words are lowercase and filtered by length at runtime.
+- Downloaded automatically on first run
+- Cached locally
+- Lowercase
+- Filtered by word length at runtime
 
-Future versions will probably let you override this, but for now: it Just Works™.
+No configuration needed. It just works.
+
+---
 
 ## Why This Exists
 
-* Because eyeballing lists sucks
-* Because most Wordle solvers cheat *way* harder than this
-* Because writing a tiny Rust tool is more fun than doomscrolling
+- Because eyeballing candidate lists sucks
+- Because most Wordle solvers are subtly wrong
+- Because repeated-letter logic is a graveyard
+- Because building a correct solver is more satisfying than doomscrolling
+- Because someone was too confident about a solve in two
 
-## Future Ideas (a.k.a. obvious next steps)
+---
 
-* Multiple guesses in one run
-* Different scoring modes (`solve` vs `explore`)
-* Colorized output
-* Precomputed frequency caching
-* Optional hard mode enforcement
+## Known Behavior (Read This)
+
+- The solver **can return zero candidates**
+- This means the constraints are contradictory
+- This can happen in real Wordle
+- The solver is not broken when this happens
+
+If you don’t like that, you don’t want a correct solver.
+
+---
 
 ## License
 
-Do whatever you want with it. If it helps you win Wordle and feel superior for 30 seconds, mission accomplished.
+Do whatever you want with it.
 
-If you want, next step is adding **multi-guess accumulation** so you don’t re-run the program like a gremlin after every turn. Or we can make it output ANSI-colored words and feel powerful.
+If it helps you win Wordle and feel briefly superior, that’s on you.
+If it makes someone else mad, that’s a bonus.
