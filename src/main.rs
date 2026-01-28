@@ -1,30 +1,32 @@
 use anyhow::Result;
 use clap::Parser;
+use std::io::{self, Write};
 
 use wordle_grep::{
     args::Args,
     scoring::score_and_sort,
-    solver::{filter_words, parse_pattern},
+    solver::{SolverState, parse_pattern},
     wordlist::load_words,
 };
 
 fn main() -> Result<()> {
     let args = Args::parse();
-
-    let guess = args.guess.to_lowercase();
-    let pattern = args.pattern.to_uppercase();
-
-    if guess.len() > 5 {
-        anyhow::bail!("guess and pattern length must not exceed 5");
-    }
-    if guess.len() != pattern.len() {
-        anyhow::bail!("guess and pattern must be the same length");
-    }
-
     let words = load_words()?;
-    let pattern = parse_pattern(&args.pattern)?;
-    let matches = filter_words(&words, &guess, &pattern);
-    let scored = score_and_sort(&matches);
+
+    let mut state = SolverState::new(5);
+
+    if args.interactive {
+        return interactive_loop(&mut state, &words);
+    }
+
+    for pair in args.guess.chunks_exact(2) {
+        let guess = pair[0].to_lowercase();
+        let feedback = parse_pattern(&pair[1])?;
+        state.add_guess(guess, feedback);
+    }
+
+    let remaining = state.filter(&words);
+    let scored = score_and_sort(&remaining);
 
     for (word, score) in scored {
         println!("{word} ({score})");
@@ -33,36 +35,41 @@ fn main() -> Result<()> {
     Ok(())
 }
 
-#[cfg(test)]
-mod tests {
-    use std::process::Command;
+fn interactive_loop(state: &mut SolverState, words: &[String]) -> anyhow::Result<()> {
+    let stdin = io::stdin();
 
-    #[test]
-    fn test_guess_and_pattern_same_length() {
-        let output = Command::new("cargo")
-            .args(["run", "--", "--guess", "apple", "--pattern", "22222"])
-            .output()
-            .expect("failed to execute process");
-        assert!(output.status.success());
+    loop {
+        print!("guess> ");
+        io::stdout().flush()?;
+
+        let mut line = String::new();
+        if stdin.read_line(&mut line)? == 0 {
+            break; // EOF
+        }
+
+        let parts: Vec<_> = line.split_whitespace().collect();
+        if parts.len() != 2 {
+            eprintln!("expected: WORD PATTERN (or Ctrl+D to exit)");
+            continue;
+        }
+
+        let guess = parts[0].to_lowercase();
+        let feedback = parse_pattern(parts[1])?;
+
+        state.add_guess(guess, feedback);
+
+        let remaining = state.filter(words);
+        let scored = score_and_sort(&remaining);
+
+        println!("remaining: {}", remaining.len());
+        for (word, score) in scored.iter().take(10) {
+            println!("{word} ({score})");
+        }
+
+        if remaining.len() <= 2 {
+            println!("⚠ forced state detected");
+        }
     }
 
-    #[test]
-    fn test_guess_and_pattern_different_length() {
-        let output = Command::new("cargo")
-            .args(["run", "--", "--guess", "apple", "--pattern", "2222"])
-            .output()
-            .expect("failed to execute process");
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        assert!(stderr.contains("guess and pattern must be the same length"));
-    }
-
-    #[test]
-    fn test_guess_and_pattern_too_long() {
-        let output = Command::new("cargo")
-            .args(["run", "--", "--guess", "apples", "--pattern", "222222"])
-            .output()
-            .expect("failed to execute process");
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        assert!(stderr.contains("guess and pattern length must not exceed 5"));
-    }
+    Ok(())
 }

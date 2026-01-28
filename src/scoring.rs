@@ -67,4 +67,3 @@ mod tests {
         assert!(scored.is_empty());
     }
 }
-

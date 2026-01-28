@@ -1,11 +1,12 @@
 use clap::Parser;
 
 #[derive(Parser)]
-#[command(author, version, about)]
 pub struct Args {
-    /// Your guessed word
-    pub guess: String,
+    /// Repeated guess entries: WORD PATTERN
+    #[arg(long, num_args = 2, value_names = ["WORD", "PATTERN"])]
+    pub guess: Vec<String>,
 
-    /// Pattern like GXXYX
-    pub pattern: String,
+    /// Run in interactive mode
+    #[arg(long)]
+    pub interactive: bool,
 }
