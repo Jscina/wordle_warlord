@@ -153,6 +153,42 @@ pub fn filter_words<'a>(words: &'a [String], guess: &str, pattern: &[Feedback]) 
         .collect()
 }
 
+pub fn generate_feedback(target: &str, guess: &str) -> Vec<Feedback> {
+    let target_chars: Vec<char> = target.chars().collect();
+    let guess_chars: Vec<char> = guess.chars().collect();
+
+    let mut feedback = vec![Feedback::Gray; guess.len()];
+    let mut target_counts: HashMap<char, usize> = HashMap::new();
+
+    for &c in &target_chars {
+        *target_counts.entry(c).or_insert(0) += 1;
+    }
+
+    // First pass: mark greens and update counts
+    for (i, (&guess_char, &target_char)) in guess_chars.iter().zip(target_chars.iter()).enumerate()
+    {
+        if guess_char == target_char {
+            feedback[i] = Feedback::Green;
+            *target_counts.entry(guess_char).or_insert(0) -= 1;
+        }
+    }
+
+    // Second pass: mark yellows
+    for (i, &guess_char) in guess_chars.iter().enumerate() {
+        if feedback[i] == Feedback::Green {
+            continue;
+        }
+        if let Some(count) = target_counts.get_mut(&guess_char) {
+            if *count > 0 {
+                feedback[i] = Feedback::Yellow;
+                *count -= 1;
+            }
+        }
+    }
+
+    feedback
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
