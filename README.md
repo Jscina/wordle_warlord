@@ -1,10 +1,13 @@
 # wordle-grep 🟩🟨⬛
 
-A Wordle solver written in Rust, with an interactive terminal UI.
+A Wordle solver **and** local Wordle game written in Rust, with an interactive terminal UI.
 
-`wordle-grep` models _actual_ Wordle rules — including repeated letters, per-guess min/max constraints, and multi-guess compounding and surfaces the remaining solution space as it collapses.
+`wordle-grep` models actual Wordle rules including repeated letters, per-guess min/max constraints, and multi-guess compounding and lets you either:
 
-This started as “I could just grep this” and turned into “okay, let’s do it properly.”
+- solve real Wordle puzzles, or
+- play Wordle locally in your terminal.
+
+What started as “I could just grep this” turned into “okay, let’s actually do it right.”
 
 ---
 
@@ -12,45 +15,91 @@ This started as “I could just grep this” and turned into “okay, let’s do
 
 **This is:**
 
-- A Wordle solver engine with real semantics
-- A stateful, interactive terminal UI
-- Deterministic, test-backed logic
-- Honest about contradictions (empty results mean _you’re dead_)
+- A correct Wordle solver engine
+- A playable local Wordle clone
+- An interactive terminal UI
+- Deterministic, test-backed solving logic
+- Honest about contradictions
 
-If the solver says “no solutions,” that’s not a bug that’s Wordle telling you you fucked up earlier.
+If the solver says “no solutions,” that’s not a bug it means earlier constraints contradict reality.
 
----
+In other words: Wordle says you messed up.
+
+This is not:
+
+- A bot that plays Wordle online for you
+- A cheat that instantly reveals the answer
+- An automated solver that plays without input
+- A mathematically optimal solver minimizing guesses
+- Guaranteed to suggest the perfect next move
+- A browser plugin or Wordle scraper
+
+It helps you reason about the puzzle it doesn’t play it for you.
 
 ## Features
 
-- **Correct Wordle constraint handling**
-  - Green / Yellow establish **minimum letter counts**
-  - Gray establishes **maximum letter counts per guess**
-  - Repeated-letter edge cases handled correctly
+### 🧠 Correct Wordle constraint handling
 
-- **Stateful solving**
-  - Constraints accumulate across guesses
-  - Later guesses can retroactively invalidate earlier assumptions (as in real Wordle)
+- Green / Yellow establish **minimum letter counts**
+- Gray establishes **maximum counts per guess**
+- Repeated-letter edge cases handled correctly
+- Constraints compound across guesses like real Wordle
 
-- **Interactive terminal UI**
-  - Colored tiles (🟩🟨⬛ vibes)
-  - Live candidate narrowing
-  - Immediate visibility into forced states
+---
 
-- **Frequency-based suggestion ranking**
-  - Scores candidates by informational value
-  - No double-letter inflation
+### 🎮 Play Wordle locally
 
-- **Test-backed solver**
-  - Repeated-letter cases
-  - Multi-guess compounding
-  - Known failure modes covered
+- Random solution selection
+- Standard 6-guess gameplay
+- Colored tile feedback
+- Solver suggestions available mid-game if you want help
+
+Play normally, or cheat responsibly.
+
+---
+
+### 🔎 Solver mode
+
+Enter guesses manually and narrow solutions interactively.
+
+- Colored guess history
+- Live candidate filtering
+- Ranked suggestions
+- Undo support
+- Constraint visualization
+
+Great for solving real NYT puzzles.
+
+---
+
+### 📊 Live analysis panels
+
+Solver shows:
+
+- Letter frequency breakdown
+- Position likelihoods
+- Active constraints
+- Remaining solution pool stats
+
+So you can actually see the solution space collapse.
+
+---
+
+### 🧪 Test-backed solver
+
+Solver logic includes tests for:
+
+- Repeated-letter behavior
+- Multi-guess constraint interaction
+- Known Wordle edge cases
+
+If results are empty, the constraints are wrong — not the code.
 
 ---
 
 ## Installation
 
-Clone and build like a normal Rust app:
+Clone and build normally:
 
 ```bash
 git clone https://github.com/yourname/wordle-grep
@@ -64,97 +113,142 @@ Or just run it:
 cargo run
 ```
 
-On first launch, it will download and cache a standard Wordle wordlist automatically.
+On first run, the app downloads and caches a Wordle wordlist automatically.
 
 ---
 
 ## Usage
 
-When you run it:
+Launch:
 
 ```bash
 cargo run
 ```
 
-You get an interactive session where you:
-
-1. Enter guesses as:
-
-   ```
-   <guess> <pattern>
-   ```
-
-   Example:
-
-   ```
-   daisy GXXYG
-   ```
-
-2. The solver updates immediately:
-   - Guesses render as colored tiles
-   - Remaining candidates update live
-   - Suggestions are ranked by usefulness
-
-3. Repeat until:
-   - You win
-   - Or the solver correctly tells you there is no valid solution
-
-### Pattern Rules
-
-- `G` — green: correct letter, correct position
-- `Y` — yellow: letter exists, wrong position
-- `X` — gray: letter does **not** appear beyond what’s already justified in that guess
-
-Lowercase patterns are accepted.
+You start in **solver mode**.
 
 ---
 
-## How Suggestions Are Scored
+### Solver Mode
 
-1. Count how often each letter appears across the remaining valid candidates
-2. Score each candidate by the **sum of its unique letter frequencies**
+Enter guesses like:
+
+```
+<guess> <pattern>
+```
+
+Example:
+
+```
+daisy GXXYG
+```
+
+Pattern rules:
+
+- `G` = correct letter, correct position
+- `Y` = correct letter, wrong position
+- `X` = letter not present beyond justified counts
+
+Lowercase also works.
+
+---
+
+### Game Mode
+
+Press:
+
+```
+Ctrl+G
+```
+
+to start a local Wordle game.
+
+Gameplay:
+
+- Type a guess
+- Press Enter
+- Receive colored feedback
+- Solve within 6 guesses
+
+Press Enter after game over to start a new round.
+
+Return to solver mode with:
+
+```
+Ctrl+S
+```
+
+---
+
+## Controls
+
+| Key    | Action           |
+| ------ | ---------------- |
+| Enter  | Submit guess     |
+| Ctrl+G | Start game mode  |
+| Ctrl+S | Return to solver |
+| Ctrl+Z | Undo last guess  |
+| Ctrl+Q | Quit             |
+
+---
+
+## Suggestion Ranking
+
+Suggestions are ranked by informational value:
+
+1. Count letter frequency among remaining solutions
+2. Score words by sum of **unique letter frequencies**
 3. Sort descending
 
-Why unique letters?
-Because repeating letters doesn’t give you new information, and pretending otherwise is cope.
+Repeated letters don't give extra information, so they aren't rewarded.
+
+Information beats vibes.
 
 ---
 
-## Wordlist
+## Wordlists
 
-- Downloaded automatically on first run
-- Cached locally
+The app downloads and caches a Wordle-compatible wordlist automatically.
+
+Words are:
+
 - Lowercase
-- Filtered by word length at runtime
+- Filtered by length
+- Used for both solving and gameplay
 
-No configuration needed. It just works.
+No configuration required.
+
+---
+
+## Known Behavior
+
+The solver can legitimately return zero candidates.
+
+This means:
+
+- constraints conflict
+- or feedback was entered incorrectly
+
+That can happen in real Wordle.
+
+The solver is not broken when this occurs.
 
 ---
 
 ## Why This Exists
 
-- Because eyeballing candidate lists sucks
-- Because most Wordle solvers are subtly wrong
-- Because repeated-letter logic is a graveyard
-- Because building a correct solver is more satisfying than doomscrolling
-- Because someone was too confident about a solve in two
+Because:
 
----
-
-## Known Behavior (Read This)
-
-- The solver **can return zero candidates**
-- This means the constraints are contradictory
-- This can happen in real Wordle
-- The solver is not broken when this happens
-
-If you don’t like that, you don’t want a correct solver.
+- manually tracking constraints sucks
+- correct solvers are fun to build
+- and someone was way too confident about a solve in two
 
 ---
 
 ## License
 
-Do whatever you want with it.
+Do whatever you want.
 
-If it helps you win Wordle and feel briefly superior, that’s on you.
-If it makes someone else mad, that’s a bonus.
+If it helps you win Wordle and feel superior, enjoy it.
+
+If it annoys someone, even better.
