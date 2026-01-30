@@ -2,26 +2,26 @@ use anyhow::Result;
 use crossterm::{
     event::{self, Event, KeyCode, KeyModifiers},
     execute,
-    terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
+    terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
 };
 use ratatui::{
+    Frame, Terminal,
     backend::CrosstermBackend,
     layout::{Constraint, Direction, Layout},
     style::{Color, Style},
     text::{Line, Span},
     widgets::{Block, Borders, List, ListItem, Paragraph},
-    Frame, Terminal,
 };
-use std::io::{stdout, Stdout};
+use std::io::{Stdout, stdout};
 
 use crate::{
     analysis::{
+        ConstraintSummary, LetterAnalysis, PositionAnalysis, SolutionPoolStats,
         compute_constraint_summary, compute_letter_analysis, compute_position_analysis,
-        compute_solution_pool_stats, ConstraintSummary, LetterAnalysis, PositionAnalysis,
-        SolutionPoolStats,
+        compute_solution_pool_stats,
     },
     scoring::score_and_sort,
-    solver::{generate_feedback, parse_pattern, Feedback, SolverState},
+    solver::{Feedback, Guess, SolverState, generate_feedback, parse_pattern},
     wordlist::{load_words, select_random_word},
 };
 
@@ -35,7 +35,7 @@ enum ParsedInput {
     Incomplete,
     Invalid,
     Valid {
-        guess: String,
+        word: String,
         feedback: Vec<Feedback>,
     },
 }
@@ -152,13 +152,13 @@ impl App {
 
     fn parse_input(&self) -> ParsedInput {
         if self.mode == GameMode::Game {
-            let guess = self.input.trim().to_lowercase();
-            if guess.len() != self.solver.word_len() {
+            let word = self.input.trim().to_lowercase();
+            if word.len() != self.solver.word_len() {
                 return ParsedInput::Invalid;
             }
             // In game mode, we don't parse pattern - it's generated
             return ParsedInput::Valid {
-                guess,
+                word,
                 feedback: Vec::new(),
             };
         }
@@ -168,10 +168,10 @@ impl App {
             return ParsedInput::Incomplete;
         }
 
-        let guess = parts[0].to_lowercase();
+        let word = parts[0].to_lowercase();
         let pattern = parts[1];
 
-        if guess.len() != self.solver.word_len() {
+        if word.len() != self.solver.word_len() {
             return ParsedInput::Invalid;
         }
 
@@ -184,7 +184,7 @@ impl App {
             Err(_) => return ParsedInput::Invalid,
         };
 
-        ParsedInput::Valid { guess, feedback }
+        ParsedInput::Valid { word, feedback }
     }
 
     fn input_status(&self) -> InputStatus {
@@ -232,37 +232,48 @@ impl App {
     }
 
     fn submit_input(&mut self) {
+        if self.mode == GameMode::Game && self.game_over {
+            self.start_new_game();
+            return;
+        }
+
         if !matches!(self.input_status(), InputStatus::Valid) {
             return;
         }
 
         if self.mode == GameMode::Game {
-            if self.game_over {
-                // Start new game if game is over and user presses Enter
-                self.start_new_game();
-                return;
-            }
             if let Some(ref target) = self.target_word {
-                let guess = self.input.trim().to_lowercase();
-                let feedback = generate_feedback(target, &guess);
-                self.solver.add_guess(guess, feedback.clone());
+                let word = self.input.trim().to_lowercase();
+                let feedback = generate_feedback(target, &word);
+
+                self.solver.add_guess(Guess::new(word, feedback.clone()));
+
                 self.remaining_guesses -= 1;
                 self.check_game_state(&feedback);
+
                 self.recompute();
                 self.input.clear();
             }
         } else {
-            if let ParsedInput::Valid { guess, feedback } = self.parse_input() {
-                self.solver.add_guess(guess, feedback);
+            if let ParsedInput::Valid { word, feedback } = self.parse_input() {
+                let guess = Guess::new(word, feedback.clone());
+                self.solver.add_guess(guess);
+
                 self.recompute();
                 self.input.clear();
             }
         }
     }
+
     fn recompute(&mut self) {
         let remaining = self.solver.filter(&self.words);
-        self.suggestions = score_and_sort(&remaining);
-        // Mark analysis as dirty (will recompute on next draw)
+
+        if self.solver.guesses().is_empty() {
+            self.suggestions.clear();
+        } else {
+            self.suggestions = score_and_sort(&remaining);
+        }
+
         self.analysis_dirty = true;
     }
 
@@ -351,21 +362,13 @@ impl App {
             .split(f.area());
 
         // Left column vertical layout (existing content)
-        let left_constraints = if self.mode == GameMode::Game {
-            vec![
-                Constraint::Length(3), // game status
-                Constraint::Length(8), // guesses
-                Constraint::Min(5),    // suggestions
-                Constraint::Length(3), // input
-            ]
-        } else {
-            vec![
-                Constraint::Length(2), // mode indicator
-                Constraint::Length(8), // guesses
-                Constraint::Min(5),    // suggestions
-                Constraint::Length(3), // input
-            ]
-        };
+
+        let left_constraints = vec![
+            Constraint::Length(3), // Mode
+            Constraint::Length(8), // Guesses
+            Constraint::Min(5),    // Suggestions
+            Constraint::Length(3), // Input
+        ];
 
         let left_layout = Layout::default()
             .direction(Direction::Vertical)
@@ -376,10 +379,10 @@ impl App {
         let right_layout = Layout::default()
             .direction(Direction::Vertical)
             .constraints([
-                Constraint::Length(8), // letter analysis (40%)
-                Constraint::Length(6), // position analysis (30%)
-                Constraint::Length(4), // constraint summary (20%)
-                Constraint::Length(2), // solution pool (10%)
+                Constraint::Length(8),  // letter analysis
+                Constraint::Length(16), // position analysis
+                Constraint::Length(8),  // constraint summary
+                Constraint::Length(6),  // solution pool
             ])
             .split(main_layout[1]);
 
@@ -433,12 +436,15 @@ impl App {
     }
 
     fn draw_suggestions(&self, f: &mut Frame, area: ratatui::layout::Rect) {
-        let items: Vec<ListItem> = self
-            .suggestions
-            .iter()
-            .take(10)
-            .map(|(w, s)| ListItem::new(format!("{w} ({s})")))
-            .collect();
+        let items: Vec<ListItem> = if self.suggestions.is_empty() {
+            vec![ListItem::new("No suggestions yet")]
+        } else {
+            self.suggestions
+                .iter()
+                .take(10)
+                .map(|(w, s)| ListItem::new(format!("{w} ({s})")))
+                .collect()
+        };
 
         let title = if self.mode == GameMode::Game {
             format!("Suggestions (remaining: {})", self.suggestions.len())
@@ -486,7 +492,7 @@ impl App {
 
     fn draw_mode_indicator(&self, f: &mut Frame, area: ratatui::layout::Rect) {
         let mode_text = format!(
-            "Mode: {} | Press Ctrl+G for Game Mode",
+            "Mode: {} | Press Ctrl+G to Toggle Mode",
             if self.mode == GameMode::Solver {
                 "Solver"
             } else {

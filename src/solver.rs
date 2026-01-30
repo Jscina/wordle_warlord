@@ -1,5 +1,6 @@
 use anyhow::Result;
-use std::{collections::HashMap, convert::TryFrom};
+use std::collections::HashMap;
+use std::convert::TryFrom;
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum Feedback {
@@ -13,9 +14,9 @@ impl TryFrom<char> for Feedback {
 
     fn try_from(value: char) -> Result<Self, Self::Error> {
         match value.to_ascii_uppercase() {
-            'G' => Ok(Feedback::Green),
-            'Y' => Ok(Feedback::Yellow),
-            'X' => Ok(Feedback::Gray),
+            'G' => Ok(Self::Green),
+            'Y' => Ok(Self::Yellow),
+            'X' => Ok(Self::Gray),
             _ => Err(value),
         }
     }
@@ -25,6 +26,12 @@ impl TryFrom<char> for Feedback {
 pub struct Guess {
     pub word: String,
     pub feedback: Vec<Feedback>,
+}
+
+impl Guess {
+    pub fn new(word: String, feedback: Vec<Feedback>) -> Self {
+        Self { word, feedback }
+    }
 }
 
 #[derive(Debug)]
@@ -41,6 +48,10 @@ impl SolverState {
         }
     }
 
+    pub fn word_len(&self) -> usize {
+        self.word_len
+    }
+
     pub fn guesses(&self) -> &[Guess] {
         &self.guesses
     }
@@ -49,15 +60,11 @@ impl SolverState {
         self.guesses.pop();
     }
 
-    pub fn word_len(&self) -> usize {
-        self.word_len
-    }
+    pub fn add_guess(&mut self, guess: Guess) {
+        assert_eq!(guess.word.len(), self.word_len);
+        assert_eq!(guess.feedback.len(), self.word_len);
 
-    pub fn add_guess(&mut self, word: String, feedback: Vec<Feedback>) {
-        assert_eq!(word.len(), self.word_len);
-        assert_eq!(feedback.len(), self.word_len);
-
-        self.guesses.push(Guess { word, feedback });
+        self.guesses.push(guess);
     }
 
     pub fn filter<'a>(&self, words: &'a [String]) -> Vec<&'a String> {
@@ -87,58 +94,48 @@ pub fn matches(word: &str, guess: &str, pattern: &[Feedback]) -> bool {
     let w: Vec<char> = word.chars().collect();
     let g: Vec<char> = guess.chars().collect();
 
-    let mut min_counts: HashMap<char, usize> = HashMap::new();
-    let mut max_counts: HashMap<char, usize> = HashMap::new();
-    // Green + Yellow pass (position + minimum counts)
-    for i in 0..w.len() {
-        match pattern[i] {
-            Feedback::Green => {
-                if w[i] != g[i] {
-                    return false;
-                }
-                *min_counts.entry(g[i]).or_insert(0) += 1;
-            }
-            Feedback::Yellow => {
-                if w[i] == g[i] {
-                    return false;
-                }
-                *min_counts.entry(g[i]).or_insert(0) += 1;
-            }
-            Feedback::Gray => {}
-        }
+    if w.len() != g.len() || g.len() != pattern.len() {
+        return false;
     }
 
-    // Gray pass (establish max counts PER LETTER)
-    for &letter in g.iter() {
-        let min = *min_counts.get(&letter).unwrap_or(&0);
-
-        let has_gray = g
-            .iter()
-            .zip(pattern.iter())
-            .any(|(&c, &fb)| c == letter && fb == Feedback::Gray);
-
-        if has_gray {
-            max_counts.insert(letter, min);
-        }
-    }
-
-    // Count actual letters in the candidate word
-    let mut actual_counts: HashMap<char, usize> = HashMap::new();
+    // Count letters in candidate
+    let mut counts = HashMap::new();
     for &c in &w {
-        *actual_counts.entry(c).or_insert(0) += 1;
+        *counts.entry(c).or_insert(0) += 1;
     }
 
-    // Enforce min constraints
-    for (&letter, &min) in &min_counts {
-        if actual_counts.get(&letter).unwrap_or(&0) < &min {
-            return false;
+    // First pass: enforce greens and reduce counts
+    for i in 0..w.len() {
+        if pattern[i] == Feedback::Green {
+            if w[i] != g[i] {
+                return false;
+            }
+            *counts.get_mut(&g[i]).unwrap() -= 1;
         }
     }
 
-    // Enforce max constraints
-    for (&letter, &max) in &max_counts {
-        if actual_counts.get(&letter).unwrap_or(&0) > &max {
-            return false;
+    // Second pass: yellows
+    for i in 0..w.len() {
+        if pattern[i] == Feedback::Yellow {
+            if w[i] == g[i] {
+                return false;
+            }
+
+            match counts.get_mut(&g[i]) {
+                Some(c) if *c > 0 => *c -= 1,
+                _ => return false,
+            }
+        }
+    }
+
+    // Third pass: grays must have no remaining matches
+    for i in 0..w.len() {
+        if pattern[i] == Feedback::Gray {
+            if let Some(c) = counts.get(&g[i]) {
+                if *c > 0 {
+                    return false;
+                }
+            }
         }
     }
 
@@ -154,44 +151,56 @@ pub fn filter_words<'a>(words: &'a [String], guess: &str, pattern: &[Feedback]) 
 }
 
 pub fn generate_feedback(target: &str, guess: &str) -> Vec<Feedback> {
-    let target_chars: Vec<char> = target.chars().collect();
-    let guess_chars: Vec<char> = guess.chars().collect();
+    let t: Vec<char> = target.chars().collect();
+    let g: Vec<char> = guess.chars().collect();
 
-    let mut feedback = vec![Feedback::Gray; guess.len()];
-    let mut target_counts: HashMap<char, usize> = HashMap::new();
+    let mut result = vec![Feedback::Gray; g.len()];
+    let mut counts = HashMap::new();
 
-    for &c in &target_chars {
-        *target_counts.entry(c).or_insert(0) += 1;
+    for &c in &t {
+        *counts.entry(c).or_insert(0) += 1;
     }
 
-    // First pass: mark greens and update counts
-    for (i, (&guess_char, &target_char)) in guess_chars.iter().zip(target_chars.iter()).enumerate()
-    {
-        if guess_char == target_char {
-            feedback[i] = Feedback::Green;
-            *target_counts.entry(guess_char).or_insert(0) -= 1;
+    // greens
+    for i in 0..g.len() {
+        if g[i] == t[i] {
+            result[i] = Feedback::Green;
+            *counts.get_mut(&g[i]).unwrap() -= 1;
         }
     }
 
-    // Second pass: mark yellows
-    for (i, &guess_char) in guess_chars.iter().enumerate() {
-        if feedback[i] == Feedback::Green {
+    // yellows
+    for i in 0..g.len() {
+        if result[i] == Feedback::Green {
             continue;
         }
-        if let Some(count) = target_counts.get_mut(&guess_char) {
-            if *count > 0 {
-                feedback[i] = Feedback::Yellow;
-                *count -= 1;
+
+        if let Some(c) = counts.get_mut(&g[i]) {
+            if *c > 0 {
+                result[i] = Feedback::Yellow;
+                *c -= 1;
             }
         }
     }
 
-    feedback
+    result
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn feedback_vec(pattern: &[u8]) -> Vec<Feedback> {
+        pattern
+            .iter()
+            .map(|&b| match b {
+                0 => Feedback::Gray,
+                1 => Feedback::Yellow,
+                2 => Feedback::Green,
+                _ => panic!("Invalid feedback"),
+            })
+            .collect()
+    }
 
     #[test]
     fn test_solver_state_multiple_guesses_compound() {
@@ -205,14 +214,19 @@ mod tests {
         let mut state = SolverState::new(5);
 
         // DAISY → GXXYG
-        state.add_guess("daisy".to_string(), feedback_vec(&[2, 0, 0, 1, 2]));
+        state.add_guess(Guess::new(
+            "daisy".to_string(),
+            feedback_vec(&[2, 0, 0, 1, 2]),
+        ));
 
         let remaining = state.filter(&words);
         assert_eq!(remaining.len(), 2);
 
         // DUSTY → GGXGG
-        // S now gray → max S = 0
-        state.add_guess("dusty".to_string(), feedback_vec(&[2, 2, 0, 2, 2]));
+        state.add_guess(Guess::new(
+            "dusty".to_string(),
+            feedback_vec(&[2, 2, 0, 2, 2]),
+        ));
 
         let remaining = state.filter(&words);
         assert!(remaining.is_empty());
@@ -227,17 +241,10 @@ mod tests {
         ];
 
         let guess = "crate";
-        let pattern = feedback_vec(&[
-            0, // C gray
-            1, // R yellow
-            0, // A gray
-            0, // T gray
-            0, // E gray
-        ]);
+        let pattern = feedback_vec(&[0, 1, 0, 0, 0]);
 
         let filtered = filter_words(&words, guess, &pattern);
 
-        // All candidates violate gray constraints
         assert!(filtered.is_empty());
     }
 
@@ -250,13 +257,7 @@ mod tests {
         ];
 
         let guess = "sassy";
-        let pattern = feedback_vec(&[
-            2, // S green
-            0, // A gray
-            0, // S gray
-            0, // S gray
-            2, // Y green
-        ]);
+        let pattern = feedback_vec(&[2, 0, 0, 0, 2]);
 
         let filtered = filter_words(&words, guess, &pattern);
 
@@ -273,54 +274,61 @@ mod tests {
         ];
 
         let guess = "allot";
-        let pattern = feedback_vec(&[
-            0, // A gray
-            1, // L yellow
-            0, // L gray
-            0, // O gray
-            0, // T gray
-        ]);
+        let pattern = feedback_vec(&[0, 1, 0, 0, 0]);
 
         let filtered = filter_words(&words, guess, &pattern);
-        assert!(filtered.is_empty());
-    }
 
-    fn feedback_vec(pattern: &[u8]) -> Vec<Feedback> {
-        pattern
-            .iter()
-            .map(|&b| match b {
-                0 => Feedback::Gray,
-                1 => Feedback::Yellow,
-                2 => Feedback::Green,
-                _ => panic!("Invalid feedback"),
-            })
-            .collect()
+        assert!(filtered.is_empty());
     }
 
     #[test]
     fn test_filter_words_basic() {
         let words = vec![
-            String::from("apple"),
-            String::from("apply"),
-            String::from("angle"),
-            String::from("ample"),
+            "apple".to_string(),
+            "apply".to_string(),
+            "angle".to_string(),
+            "ample".to_string(),
         ];
+
         let guess = "apple";
-        let pattern = feedback_vec(&[2, 2, 2, 2, 2]); // All green
+        let pattern = feedback_vec(&[2, 2, 2, 2, 2]);
+
         let filtered = filter_words(&words, guess, &pattern);
-        assert_eq!(filtered, vec![&String::from("apple")]);
+
+        assert_eq!(filtered.len(), 1);
+        assert_eq!(filtered[0].as_str(), "apple");
     }
 
     #[test]
     fn test_filter_words_length() {
         let words = vec![
-            String::from("apple"),
-            String::from("apples"),
-            String::from("appl"),
+            "apple".to_string(),
+            "apples".to_string(),
+            "appl".to_string(),
         ];
+
         let guess = "apple";
         let pattern = feedback_vec(&[2, 2, 2, 2, 2]);
+
         let filtered = filter_words(&words, guess, &pattern);
-        assert_eq!(filtered, vec![&String::from("apple")]);
+
+        assert_eq!(filtered.len(), 1);
+        assert_eq!(filtered[0].as_str(), "apple");
+    }
+
+    #[test]
+    fn test_generate_feedback_duplicate_letters() {
+        let fb = generate_feedback("apple", "allay");
+
+        assert_eq!(
+            fb,
+            vec![
+                Feedback::Green,
+                Feedback::Yellow,
+                Feedback::Gray,
+                Feedback::Gray,
+                Feedback::Gray,
+            ]
+        );
     }
 }
