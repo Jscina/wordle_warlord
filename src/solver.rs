@@ -130,12 +130,8 @@ pub fn matches(word: &str, guess: &str, pattern: &[Feedback]) -> bool {
 
     // Third pass: grays must have no remaining matches
     for i in 0..w.len() {
-        if pattern[i] == Feedback::Gray {
-            if let Some(c) = counts.get(&g[i]) {
-                if *c > 0 {
-                    return false;
-                }
-            }
+        if pattern[i] == Feedback::Gray && matches!(counts.get(&g[i]), Some(c) if *c > 0) {
+            return false;
         }
     }
 
@@ -175,11 +171,11 @@ pub fn generate_feedback(target: &str, guess: &str) -> Vec<Feedback> {
             continue;
         }
 
-        if let Some(c) = counts.get_mut(&g[i]) {
-            if *c > 0 {
-                result[i] = Feedback::Yellow;
-                *c -= 1;
-            }
+        if let Some(c) = counts.get_mut(&g[i])
+            && *c > 0
+        {
+            result[i] = Feedback::Yellow;
+            *c -= 1;
         }
     }
 

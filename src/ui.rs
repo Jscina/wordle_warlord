@@ -93,10 +93,10 @@ impl App {
             terminal.draw(|f| self.draw(f))?;
 
             let event = event::read()?;
-            if let Event::Key(key) = event {
-                if self.handle_key(key) {
-                    return Ok(());
-                }
+            if let Event::Key(key) = event
+                && self.handle_key(key)
+            {
+                return Ok(());
             }
         }
     }
@@ -254,14 +254,12 @@ impl App {
                 self.recompute();
                 self.input.clear();
             }
-        } else {
-            if let ParsedInput::Valid { word, feedback } = self.parse_input() {
-                let guess = Guess::new(word, feedback.clone());
-                self.solver.add_guess(guess);
+        } else if let ParsedInput::Valid { word, feedback } = self.parse_input() {
+            let guess = Guess::new(word, feedback.clone());
+            self.solver.add_guess(guess);
 
-                self.recompute();
-                self.input.clear();
-            }
+            self.recompute();
+            self.input.clear();
         }
     }
 
@@ -379,10 +377,10 @@ impl App {
         let right_layout = Layout::default()
             .direction(Direction::Vertical)
             .constraints([
-                Constraint::Length(8),  // letter analysis
-                Constraint::Length(16), // position analysis
-                Constraint::Length(8),  // constraint summary
-                Constraint::Length(6),  // solution pool
+                Constraint::Length(8), // letter analysis
+                Constraint::Length(9), // position analysis
+                Constraint::Length(8), // constraint summary
+                Constraint::Length(6), // solution pool
             ])
             .split(main_layout[1]);
 
@@ -446,11 +444,7 @@ impl App {
                 .collect()
         };
 
-        let title = if self.mode == GameMode::Game {
-            format!("Suggestions (remaining: {})", self.suggestions.len())
-        } else {
-            format!("Suggestions (remaining: {})", self.suggestions.len())
-        };
+        let title = format!("Suggestions (remaining: {})", self.suggestions.len());
 
         f.render_widget(
             List::new(items).block(Block::default().borders(Borders::ALL).title(title)),
@@ -492,7 +486,7 @@ impl App {
 
     fn draw_mode_indicator(&self, f: &mut Frame, area: ratatui::layout::Rect) {
         let mode_text = format!(
-            "Mode: {} | Press Ctrl+G to Toggle Mode",
+            "Mode: {} | Press Ctrl+G for Game Mode",
             if self.mode == GameMode::Solver {
                 "Solver"
             } else {
