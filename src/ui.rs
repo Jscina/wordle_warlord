@@ -12,6 +12,7 @@ use ratatui::{
     text::{Line, Span},
     widgets::{Block, Borders, List, ListItem, Paragraph},
 };
+use std::collections::HashSet;
 use std::io::{Stdout, stdout};
 
 use crate::{
@@ -22,7 +23,7 @@ use crate::{
     },
     scoring::score_and_sort,
     solver::{Feedback, Guess, SolverState, generate_feedback, parse_pattern},
-    wordlist::{load_words, select_random_word},
+    wordlist::{load_solutions, load_words, select_random_word},
 };
 
 enum InputStatus {
@@ -47,7 +48,8 @@ enum GameMode {
 }
 
 pub struct App {
-    words: Vec<String>,
+    solution_words: Vec<String>,
+    allowed_lookup: HashSet<String>,
     solver: SolverState,
     input: String,
     suggestions: Vec<(String, usize)>,
@@ -66,9 +68,11 @@ pub struct App {
 }
 
 impl App {
-    pub fn new(words: Vec<String>, word_len: usize) -> Self {
+    pub fn new(words: Vec<String>, solution_words: Vec<String>, word_len: usize) -> Self {
+        let allowed_lookup: HashSet<String> = words.iter().cloned().collect();
         Self {
-            words,
+            solution_words,
+            allowed_lookup,
             solver: SolverState::new(word_len),
             input: String::new(),
             suggestions: Vec::new(),
@@ -173,6 +177,8 @@ impl App {
 
         if word.len() != self.solver.word_len() {
             return ParsedInput::Invalid;
+        } else if !self.allowed_lookup.contains(&word) {
+            return ParsedInput::Invalid;
         }
 
         if pattern.len() != self.solver.word_len() {
@@ -190,12 +196,21 @@ impl App {
     fn input_status(&self) -> InputStatus {
         if self.mode == GameMode::Game {
             let guess = self.input.trim();
+
             if guess.is_empty() {
                 return InputStatus::Incomplete;
             }
+
             if guess.len() != self.solver.word_len() {
                 return InputStatus::Invalid("guess length mismatch");
             }
+
+            let guess_lower = guess.to_lowercase();
+
+            if !self.allowed_lookup.contains(&guess_lower) {
+                return InputStatus::Invalid("word not in allowed list");
+            }
+
             return InputStatus::Valid;
         }
 
@@ -218,6 +233,8 @@ impl App {
 
         if guess.len() != self.solver.word_len() {
             return InputStatus::Invalid("guess length mismatch");
+        } else if !self.allowed_lookup.contains(&guess.to_lowercase()) {
+            return InputStatus::Invalid("word not in allowed list");
         }
 
         if pattern.len() != self.solver.word_len() {
@@ -244,6 +261,11 @@ impl App {
         if self.mode == GameMode::Game {
             if let Some(ref target) = self.target_word {
                 let word = self.input.trim().to_lowercase();
+
+                if !self.allowed_lookup.contains(&word) {
+                    return;
+                }
+
                 let feedback = generate_feedback(target, &word);
 
                 self.solver.add_guess(Guess::new(word, feedback.clone()));
@@ -255,6 +277,10 @@ impl App {
                 self.input.clear();
             }
         } else if let ParsedInput::Valid { word, feedback } = self.parse_input() {
+            if !self.allowed_lookup.contains(&word) {
+                return;
+            }
+
             let guess = Guess::new(word, feedback.clone());
             self.solver.add_guess(guess);
 
@@ -264,12 +290,12 @@ impl App {
     }
 
     fn recompute(&mut self) {
-        let remaining = self.solver.filter(&self.words);
+        let remaining = self.solver.filter(&self.solution_words);
 
         if self.solver.guesses().is_empty() {
             self.suggestions.clear();
         } else {
-            self.suggestions = score_and_sort(&remaining);
+            self.suggestions = score_and_sort(&remaining, &self.allowed_lookup);
         }
 
         self.analysis_dirty = true;
@@ -280,12 +306,15 @@ impl App {
             return;
         }
 
-        let remaining = self.solver.filter(&self.words);
+        let remaining = self.solver.filter(&self.solution_words);
 
         self.letter_analysis = Some(compute_letter_analysis(&remaining));
         self.position_analysis = Some(compute_position_analysis(&remaining, &self.solver));
         self.constraint_summary = Some(compute_constraint_summary(&self.solver));
-        self.solution_pool_stats = Some(compute_solution_pool_stats(&self.words, &remaining));
+        self.solution_pool_stats = Some(compute_solution_pool_stats(
+            &self.solution_words,
+            &remaining,
+        ));
 
         self.analysis_dirty = false;
     }
@@ -309,7 +338,7 @@ impl App {
     }
 
     fn start_new_game(&mut self) {
-        match select_random_word(&self.words, self.solver.word_len()) {
+        match select_random_word(&self.solution_words, self.solver.word_len()) {
             Ok(target) => {
                 self.mode = GameMode::Game;
                 self.target_word = Some(target);
@@ -687,7 +716,8 @@ impl App {
 
 pub fn run_ui() -> Result<()> {
     let words = load_words()?;
-    let mut app = App::new(words, 5);
+    let solution_words = load_solutions()?;
+    let mut app = App::new(words, solution_words, 5);
 
     let mut stdout = stdout();
     enable_raw_mode()?;
