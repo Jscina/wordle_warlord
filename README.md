@@ -9,6 +9,14 @@ A Wordle solver **and** local Wordle game written in Rust, with an interactive t
 
 What started as “I could just grep this” turned into “okay, let’s actually do it right.”
 
+## Solver Mode
+
+![Solver Mode](assets/solver-mode.png)
+
+## Game Mode
+
+![Game Mode](assets/game-mode.png)
+
 ---
 
 ## What This Is (and Isn’t)
