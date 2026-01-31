@@ -1,18 +1,21 @@
 use crate::solver::{Feedback, SolverState};
 use std::collections::{HashMap, HashSet};
 
+#[derive(Debug)]
 pub struct LetterAnalysis {
     pub frequencies: HashMap<char, usize>,
     pub total_words: usize,
     pub max_frequency: usize,
 }
 
+#[derive(Debug)]
 pub struct PositionAnalysis {
     pub possible_letters: Vec<Vec<char>>,
     pub solved_positions: Vec<Option<char>>,
     pub position_frequencies: Vec<HashMap<char, usize>>,
 }
 
+#[derive(Debug)]
 pub struct ConstraintSummary {
     pub greens: Vec<(char, usize, String)>,
     pub yellows: Vec<(char, Vec<usize>, String)>,
@@ -21,6 +24,7 @@ pub struct ConstraintSummary {
     pub max_counts: HashMap<char, usize>,
 }
 
+#[derive(Debug)]
 pub struct SolutionPoolStats {
     pub total_remaining: usize,
     pub eliminated_percentage: f64,

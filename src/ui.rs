@@ -12,8 +12,13 @@ use ratatui::{
     text::{Line, Span},
     widgets::{Block, Borders, List, ListItem, Paragraph},
 };
-use std::collections::HashSet;
-use std::io::{Stdout, stdout};
+use std::{
+    collections::HashSet,
+    fmt::Display,
+    io::{Stdout, stdout},
+    sync::{Arc, Mutex},
+};
+use tracing::info;
 
 use crate::{
     analysis::{
@@ -25,6 +30,39 @@ use crate::{
     solver::{Feedback, Guess, SolverState, generate_feedback, parse_pattern},
     wordlist::{load_solutions, load_words, select_random_word},
 };
+
+const MAX_LOG_LINES: usize = 300;
+
+#[derive(Clone)]
+pub struct LogBuffer {
+    inner: Arc<Mutex<Vec<String>>>,
+}
+
+impl LogBuffer {
+    pub fn new() -> Self {
+        Self {
+            inner: Arc::new(Mutex::new(Vec::new())),
+        }
+    }
+
+    pub fn push(&self, msg: String) {
+        let mut buf = self.inner.lock().unwrap();
+        buf.push(msg);
+        if buf.len() > MAX_LOG_LINES {
+            buf.remove(0);
+        }
+    }
+
+    pub fn lines(&self) -> Vec<String> {
+        self.inner.lock().unwrap().clone()
+    }
+}
+
+impl Default for LogBuffer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 enum InputStatus {
     Incomplete,
@@ -58,18 +96,24 @@ pub struct App {
     remaining_guesses: usize,
     game_won: bool,
     game_over: bool,
-    // Analysis data (cached)
     letter_analysis: Option<LetterAnalysis>,
     position_analysis: Option<PositionAnalysis>,
     constraint_summary: Option<ConstraintSummary>,
     solution_pool_stats: Option<SolutionPoolStats>,
-    // Caching flag
+    entropy_history: Vec<f64>,
     analysis_dirty: bool,
+    logs: LogBuffer,
 }
 
 impl App {
-    pub fn new(words: Vec<String>, solution_words: Vec<String>, word_len: usize) -> Self {
+    pub fn new(
+        words: Vec<String>,
+        solution_words: Vec<String>,
+        word_len: usize,
+        logs: LogBuffer,
+    ) -> Self {
         let allowed_lookup: HashSet<String> = words.iter().cloned().collect();
+
         Self {
             solution_words,
             allowed_lookup,
@@ -85,15 +129,18 @@ impl App {
             position_analysis: None,
             constraint_summary: None,
             solution_pool_stats: None,
+            entropy_history: Vec::new(),
             analysis_dirty: true,
+            logs,
         }
     }
 
     pub fn run(&mut self, terminal: &mut Terminal<CrosstermBackend<Stdout>>) -> Result<()> {
-        loop {
-            // Recompute analysis if needed before drawing
-            self.recompute_analysis();
+        info!("UI started");
+        self.logs.push("UI started".into());
 
+        loop {
+            self.recompute_analysis();
             terminal.draw(|f| self.draw(f))?;
 
             let event = event::read()?;
@@ -105,27 +152,33 @@ impl App {
         }
     }
 
-    /// Returns true if the app should exit
+    fn log(&self, msg: impl Into<String> + Display) {
+        tracing::info!("{}", &msg);
+        self.logs.push(msg.into());
+    }
+
     fn handle_key(&mut self, key: event::KeyEvent) -> bool {
         match (key.code, key.modifiers) {
-            // Quit
-            (KeyCode::Char('q'), KeyModifiers::CONTROL) => return true,
+            (KeyCode::Char('q'), KeyModifiers::CONTROL) => {
+                self.log("Exit requested");
+                return true;
+            }
 
-            // Toggle Game Mode
             (KeyCode::Char('g'), KeyModifiers::CONTROL) => {
+                self.log("Switching to game mode");
                 self.toggle_game_mode();
             }
 
-            // Toggle Solver Mode
             (KeyCode::Char('s'), KeyModifiers::CONTROL) => {
                 if self.mode == GameMode::Game {
+                    self.log("Switching to solver mode");
                     self.mode = GameMode::Solver;
                     self.recompute();
                 }
             }
 
-            // Undo
             (KeyCode::Char('z'), KeyModifiers::CONTROL) => {
+                self.log("Undo requested");
                 if self.mode == GameMode::Solver {
                     self.undo_last_guess();
                 } else {
@@ -133,24 +186,13 @@ impl App {
                 }
             }
 
-            // Submit
-            (KeyCode::Enter, _) => {
-                self.submit_input();
-            }
-
-            // Backspace
+            (KeyCode::Enter, _) => self.submit_input(),
             (KeyCode::Backspace, _) => {
                 self.input.pop();
             }
-
-            // Normal text input — ALWAYS allowed
-            (KeyCode::Char(c), _) => {
-                self.input.push(c);
-            }
-
+            (KeyCode::Char(c), _) => self.input.push(c),
             _ => {}
         }
-
         false
     }
 
@@ -250,11 +292,13 @@ impl App {
 
     fn submit_input(&mut self) {
         if self.mode == GameMode::Game && self.game_over {
+            self.log("Starting new game");
             self.start_new_game();
             return;
         }
 
         if !matches!(self.input_status(), InputStatus::Valid) {
+            self.log(format!("Input rejected: {:?}", self.input));
             return;
         }
 
@@ -263,8 +307,11 @@ impl App {
                 let word = self.input.trim().to_lowercase();
 
                 if !self.allowed_lookup.contains(&word) {
+                    self.log(format!("Rejected guess not in allowed list: {}", word));
                     return;
                 }
+
+                self.log(format!("Game guess submitted: {}", &word));
 
                 let feedback = generate_feedback(target, &word);
 
@@ -278,10 +325,12 @@ impl App {
             }
         } else if let ParsedInput::Valid { word, feedback } = self.parse_input() {
             if !self.allowed_lookup.contains(&word) {
+                self.log(format!("Rejected guess not in allowed list: {}", word));
                 return;
             }
 
-            let guess = Guess::new(word, feedback.clone());
+            let guess = Guess::new(word.clone(), feedback.clone());
+            self.log(format!("Solver guess submitted: {} {:?}", &word, feedback));
             self.solver.add_guess(guess);
 
             self.recompute();
@@ -309,12 +358,20 @@ impl App {
         let remaining = self.solver.filter(&self.solution_words);
 
         self.letter_analysis = Some(compute_letter_analysis(&remaining));
+        tracing::info!("LetterAnalysis: {:?}", self.letter_analysis);
         self.position_analysis = Some(compute_position_analysis(&remaining, &self.solver));
+        tracing::info!("PositionAnalysis: {:?}", self.position_analysis);
         self.constraint_summary = Some(compute_constraint_summary(&self.solver));
+        tracing::info!("ConstraintSummary: {:?}", self.constraint_summary);
         self.solution_pool_stats = Some(compute_solution_pool_stats(
             &self.solution_words,
             &remaining,
         ));
+
+        tracing::info!("SolutionPoolStats: {:?}", self.solution_pool_stats);
+        if let Some(stats) = &self.solution_pool_stats {
+            self.entropy_history.push(stats.entropy);
+        }
 
         self.analysis_dirty = false;
     }
@@ -329,6 +386,7 @@ impl App {
 
     fn toggle_game_mode(&mut self) {
         if self.mode == GameMode::Solver {
+            self.log("Starting new game");
             self.start_new_game();
         } else {
             self.mode = GameMode::Solver;
@@ -340,18 +398,20 @@ impl App {
     fn start_new_game(&mut self) {
         match select_random_word(&self.solution_words, self.solver.word_len()) {
             Ok(target) => {
+                tracing::info!("New game started with target word: {}", target);
                 self.mode = GameMode::Game;
                 self.target_word = Some(target);
                 self.remaining_guesses = 6;
                 self.game_won = false;
                 self.game_over = false;
                 self.solver = SolverState::new(self.solver.word_len());
+                self.entropy_history.clear();
                 self.input.clear();
                 self.recompute();
                 self.analysis_dirty = true;
             }
             Err(_) => {
-                // Handle error silently for now
+                self.log("Failed to start new game: no words available");
             }
         }
     }
@@ -370,6 +430,11 @@ impl App {
     fn check_game_state(&mut self, feedback: &[Feedback]) {
         // Check if won (all green)
         if feedback.iter().all(|&fb| fb == Feedback::Green) {
+            self.log(format!(
+                "Target word was {}",
+                self.target_word.as_ref().unwrap()
+            ));
+            self.log("Game won!");
             self.game_won = true;
             self.game_over = true;
             return;
@@ -377,60 +442,53 @@ impl App {
 
         // Check if out of guesses
         if self.remaining_guesses == 0 {
+            self.log("Game over: out of guesses");
             self.game_over = true;
         }
     }
 
     fn draw(&self, f: &mut Frame) {
-        // Horizontal split: 55% left (game), 45% right (analysis)
         let main_layout = Layout::default()
             .direction(Direction::Horizontal)
             .constraints([Constraint::Percentage(55), Constraint::Percentage(45)])
             .split(f.area());
 
-        // Left column vertical layout (existing content)
-
-        let left_constraints = vec![
-            Constraint::Length(3), // Mode
-            Constraint::Length(8), // Guesses
-            Constraint::Min(5),    // Suggestions
-            Constraint::Length(3), // Input
-        ];
-
         let left_layout = Layout::default()
             .direction(Direction::Vertical)
-            .constraints(left_constraints)
+            .constraints([
+                Constraint::Length(3),
+                Constraint::Length(8),
+                Constraint::Min(5),
+                Constraint::Length(3),
+            ])
             .split(main_layout[0]);
 
-        // Right column analysis layout
         let right_layout = Layout::default()
             .direction(Direction::Vertical)
             .constraints([
-                Constraint::Length(8), // letter analysis
-                Constraint::Length(9), // position analysis
-                Constraint::Length(8), // constraint summary
-                Constraint::Length(6), // solution pool
+                Constraint::Length(8),
+                Constraint::Length(8),
+                Constraint::Length(8),
+                Constraint::Length(12),
+                Constraint::Min(6), // logs panel
             ])
             .split(main_layout[1]);
 
-        // Draw left column (existing logic)
         if self.mode == GameMode::Game {
             self.draw_game_status(f, left_layout[0]);
-            self.draw_guesses(f, left_layout[1]);
-            self.draw_suggestions(f, left_layout[2]);
-            self.draw_input(f, left_layout[3]);
         } else {
             self.draw_mode_indicator(f, left_layout[0]);
-            self.draw_guesses(f, left_layout[1]);
-            self.draw_suggestions(f, left_layout[2]);
-            self.draw_input(f, left_layout[3]);
         }
 
-        // Draw right column (new analysis panels)
+        self.draw_guesses(f, left_layout[1]);
+        self.draw_suggestions(f, left_layout[2]);
+        self.draw_input(f, left_layout[3]);
+
         self.draw_letter_analysis(f, right_layout[0]);
         self.draw_position_analysis(f, right_layout[1]);
         self.draw_constraint_summary(f, right_layout[2]);
         self.draw_solution_pool(f, right_layout[3]);
+        self.draw_logs(f, right_layout[4]);
     }
 
     fn draw_guesses(&self, f: &mut Frame, area: ratatui::layout::Rect) {
@@ -573,36 +631,37 @@ impl App {
 
     fn draw_letter_analysis(&self, f: &mut Frame, area: ratatui::layout::Rect) {
         if let Some(analysis) = &self.letter_analysis {
+            let mut freq: Vec<(char, usize)> =
+                analysis.frequencies.iter().map(|(c, v)| (*c, *v)).collect();
+
+            // Sort by frequency descending
+            freq.sort_by(|a, b| b.1.cmp(&a.1));
+
+            let max_bar = area.width.saturating_sub(8) as usize;
+
             let mut lines = vec![
-                Line::from("Letter Analysis"),
-                Line::from(format!("(Remaining: {} words)", analysis.total_words)),
-                Line::from(""), // spacer
+                Line::from(format!("Remaining: {} words", analysis.total_words)),
+                Line::from(""),
             ];
 
-            for c in ('A'..='Z').collect::<Vec<_>>() {
-                if let Some(&count) = analysis.frequencies.get(&c) {
-                    let bar_width = if analysis.max_frequency > 0 {
-                        (count * 16 / analysis.max_frequency).max(1)
-                    } else {
-                        0
-                    };
-                    let bar = "█".repeat(bar_width);
-                    let style = if count > 0 {
-                        Style::default().fg(Color::White)
-                    } else {
-                        Style::default().fg(Color::DarkGray)
-                    };
+            for (c, count) in freq.into_iter().take(10) {
+                let width = if analysis.max_frequency > 0 {
+                    (count * max_bar / analysis.max_frequency).max(1)
+                } else {
+                    0
+                };
 
-                    lines.push(Line::from(vec![
-                        Span::raw(format!("{}: {:<3} ", c, count)),
-                        Span::styled(bar, style),
-                    ]));
-                }
+                let bar = "█".repeat(width);
+
+                lines.push(Line::from(vec![
+                    Span::raw(format!("{} {:>4} ", c, count)),
+                    Span::styled(bar, Style::default().fg(Color::Cyan)),
+                ]));
             }
 
             f.render_widget(
                 Paragraph::new(lines)
-                    .block(Block::default().borders(Borders::ALL).title("Analysis")),
+                    .block(Block::default().borders(Borders::ALL).title("Letters")),
                 area,
             );
         }
@@ -696,15 +755,49 @@ impl App {
 
     fn draw_solution_pool(&self, f: &mut Frame, area: ratatui::layout::Rect) {
         if let Some(stats) = &self.solution_pool_stats {
-            let lines = vec![
+            let mut lines = vec![
                 Line::from("Solution Pool"),
                 Line::from(format!("Total: {} remaining", stats.total_remaining)),
                 Line::from(format!(
                     "Filtered: {:.1}% eliminated",
                     stats.eliminated_percentage
                 )),
-                Line::from(format!("Entropy: {:.1} bits", stats.entropy)),
+                Line::from(format!("Entropy: {:.2} bits", stats.entropy)),
+                Line::from(""),
             ];
+
+            if !self.entropy_history.is_empty() {
+                let graph_height = area.height.saturating_sub(lines.len() as u16 + 2) as usize;
+                let graph_width = area.width.saturating_sub(2) as usize;
+
+                if graph_height > 0 && graph_width > 0 {
+                    let start = self.entropy_history.len().saturating_sub(graph_width);
+                    let slice = &self.entropy_history[start..];
+
+                    let max_entropy = slice.iter().cloned().fold(0.0_f64, f64::max);
+
+                    let mut grid = vec![vec![' '; graph_width]; graph_height];
+
+                    for (i, value) in slice.iter().enumerate() {
+                        let x = i;
+
+                        let normalized = if max_entropy > 0.0 {
+                            ((value + 1.0).ln() / (max_entropy + 1.0).ln()).clamp(0.0, 1.0)
+                        } else {
+                            0.0
+                        };
+
+                        let y =
+                            graph_height - 1 - (normalized * (graph_height as f64 - 1.0)) as usize;
+
+                        grid[y][x] = '●';
+                    }
+
+                    for row in grid {
+                        lines.push(Line::from(row.into_iter().collect::<String>()));
+                    }
+                }
+            }
 
             f.render_widget(
                 Paragraph::new(lines).block(Block::default().borders(Borders::ALL).title("Pool")),
@@ -712,12 +805,31 @@ impl App {
             );
         }
     }
+
+    fn draw_logs(&self, f: &mut Frame, area: ratatui::layout::Rect) {
+        let logs = self.logs.lines();
+
+        let height = area.height as usize;
+        let start = logs.len().saturating_sub(height);
+
+        let lines: Vec<Line> = logs[start..]
+            .iter()
+            .map(|l| Line::from(l.clone()))
+            .collect();
+
+        f.render_widget(
+            Paragraph::new(lines).block(Block::default().borders(Borders::ALL).title("Logs")),
+            area,
+        );
+    }
 }
 
 pub fn run_ui() -> Result<()> {
     let words = load_words()?;
     let solution_words = load_solutions()?;
-    let mut app = App::new(words, solution_words, 5);
+    let logs = LogBuffer::new();
+
+    let mut app = App::new(words, solution_words, 5, logs.clone());
 
     let mut stdout = stdout();
     enable_raw_mode()?;

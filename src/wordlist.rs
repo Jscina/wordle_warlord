@@ -1,5 +1,5 @@
 use anyhow::{Context, Result};
-use rand::seq::SliceRandom;
+use rand::seq::IndexedRandom;
 use reqwest::blocking::get;
 use std::fs;
 use std::path::Path;
@@ -34,7 +34,7 @@ pub fn select_random_word(words: &[String], word_len: usize) -> Result<String> {
     }
 
     let selected = filtered
-        .choose(&mut rand::thread_rng())
+        .choose(&mut rand::rng())
         .ok_or_else(|| anyhow::anyhow!("failed to select random word"))?;
 
     Ok(selected.to_string())

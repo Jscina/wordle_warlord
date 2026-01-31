@@ -94,7 +94,7 @@ mod tests {
     #[test]
     fn test_solution_bonus_applied() {
         // Same letter distribution, solution should win
-        let words = vec![String::from("crate"), String::from("trace")];
+        let words = [String::from("crate"), String::from("trace")];
 
         let word_refs: Vec<&String> = words.iter().collect();
 
