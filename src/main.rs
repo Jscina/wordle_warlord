@@ -1,5 +1,5 @@
 use anyhow::Result;
-use wordle_grep::ui;
+use wordle_warlord::ui;
 
 use once_cell::sync::OnceCell;
 use tracing_appender::rolling;
@@ -9,7 +9,7 @@ use tracing_subscriber::{EnvFilter, fmt};
 static LOG_GUARD: OnceCell<tracing_appender::non_blocking::WorkerGuard> = OnceCell::new();
 
 fn init_logging() {
-    let file_appender = rolling::daily("logs", "wordle-grep.log");
+    let file_appender = rolling::daily("logs", "wordle-warlord.log");
     let (non_blocking, guard) = tracing_appender::non_blocking(file_appender);
 
     // Store the guard so it lives for the duration of the program

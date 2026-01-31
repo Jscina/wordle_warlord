@@ -1,8 +1,8 @@
-# wordle-grep 🟩🟨⬛
+# wordle-warlord 🟩🟨⬛
 
 A Wordle solver **and** local Wordle game written in Rust, with an interactive terminal UI.
 
-`wordle-grep` models actual Wordle rules including repeated letters, per-guess min/max constraints, and multi-guess compounding and lets you either:
+`wordle-warlord` models actual Wordle rules including repeated letters, per-guess min/max constraints, and multi-guess compounding and lets you either:
 
 - solve real Wordle puzzles, or
 - play Wordle locally in your terminal.
@@ -97,13 +97,13 @@ If results are empty, the constraints are wrong — not the code.
 
 ---
 
-## Installation
+## Manual Installation
 
 Clone and build normally:
 
 ```bash
-git clone https://github.com/yourname/wordle-grep
-cd wordle-grep
+git clone https://github.com/jscina/wordle-warlord.git
+cd wordle-warlord
 cargo build --release
 ```
 
