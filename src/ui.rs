@@ -370,7 +370,10 @@ impl App {
 
         tracing::info!("SolutionPoolStats: {:?}", self.solution_pool_stats);
         if let Some(stats) = &self.solution_pool_stats {
-            self.entropy_history.push(stats.entropy);
+            // Only push if not rebuilding (i.e., during normal guess submission)
+            if self.entropy_history.len() < self.solver.guesses().len() {
+                self.entropy_history.push(stats.entropy);
+            }
         }
 
         self.analysis_dirty = false;
@@ -380,7 +383,20 @@ impl App {
         if !self.solver.guesses().is_empty() {
             self.solver.pop_guess();
             self.recompute();
+            self.rebuild_entropy_history_from_guesses();
             self.analysis_dirty = true;
+        }
+    }
+
+    fn rebuild_entropy_history_from_guesses(&mut self) {
+        self.entropy_history.clear();
+        let guesses = self.solver.guesses();
+        let mut temp_solver = SolverState::new(self.solver.word_len());
+        for guess in guesses {
+            temp_solver.add_guess(guess.clone());
+            let remaining = temp_solver.filter(&self.solution_words);
+            let stats = compute_solution_pool_stats(&self.solution_words, &remaining);
+            self.entropy_history.push(stats.entropy);
         }
     }
 
@@ -423,6 +439,7 @@ impl App {
             self.game_won = false;
             self.game_over = false;
             self.recompute();
+            self.rebuild_entropy_history_from_guesses();
             self.analysis_dirty = true;
         }
     }
