@@ -7,6 +7,8 @@ mod app;
 mod handlers;
 mod history;
 mod rendering;
+#[cfg(test)]
+mod tests;
 mod types;
 
 pub use app::App;

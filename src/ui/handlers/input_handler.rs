@@ -134,10 +134,10 @@ impl<'a> InputHandler<'a> {
 
             KeyCode::Char(c @ '0'..='9') => {
                 if self.app.history_view_mode == HistoryViewMode::List {
-                    let index = c.to_digit(10).unwrap() as usize;
-                    if index > 0 && index <= 10 {
-                        HistoryHandler::new(self.app).select_game_on_page(index - 1);
-                    }
+                    let digit = c.to_digit(10).unwrap() as usize;
+                    // Map: 1-9 -> items 0-8, 0 -> item 9 (the 10th item)
+                    let index = if digit == 0 { 9 } else { digit - 1 };
+                    HistoryHandler::new(self.app).select_game_on_page(index);
                 }
             }
 

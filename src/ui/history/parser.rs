@@ -270,7 +270,7 @@ mod tests {
         assert_eq!(game.guesses.len(), 2); // Should be 2, not 3 (salty was undone)
         assert_eq!(game.guesses[0].word, "raise");
         assert_eq!(game.guesses[1].word, "savvy");
-        assert!(game.was_won());
+        assert!(matches!(game.outcome, GameOutcome::Won { .. }));
     }
 
     #[test]

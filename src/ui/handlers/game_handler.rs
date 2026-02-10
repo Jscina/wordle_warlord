@@ -1,5 +1,3 @@
-//! Game mode state management.
-
 use crate::{
     solver::{Feedback, SolverState},
     wordlist::select_random_word,
@@ -72,5 +70,4 @@ impl<'a> GameHandler<'a> {
     }
 }
 
-// Forward declaration - SolverHandler will be defined in solver_handler.rs
 use super::SolverHandler;

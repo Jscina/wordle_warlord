@@ -52,12 +52,6 @@ impl<'a> HistoryHandler<'a> {
         }
     }
 
-    /// Reload history from log files (in case new games were played).
-    pub fn reload_history(&mut self) {
-        self.app.history_data = None;
-        self.load_history();
-    }
-
     /// Switch to the next view mode (Stats -> List -> Detail -> Stats).
     pub fn cycle_view_mode(&mut self) {
         self.app.history_view_mode = match self.app.history_view_mode {

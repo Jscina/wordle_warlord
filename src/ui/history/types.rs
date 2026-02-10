@@ -34,19 +34,9 @@ impl GameRecord {
         self.guesses.len()
     }
 
-    /// Returns true if the game was won.
-    pub fn was_won(&self) -> bool {
-        matches!(self.outcome, GameOutcome::Won { .. })
-    }
-
     /// Returns true if the game was lost.
     pub fn was_lost(&self) -> bool {
         matches!(self.outcome, GameOutcome::Lost)
-    }
-
-    /// Returns true if the game was abandoned (not completed).
-    pub fn was_abandoned(&self) -> bool {
-        matches!(self.outcome, GameOutcome::Abandoned)
     }
 }
 
