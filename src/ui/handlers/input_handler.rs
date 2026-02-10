@@ -2,7 +2,7 @@
 
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
-use crate::solver::{Guess, generate_feedback, parse_pattern};
+use crate::solver::{generate_feedback, parse_pattern, Guess};
 
 use super::super::{
     app::App,
@@ -22,17 +22,17 @@ impl<'a> InputHandler<'a> {
 
     pub fn handle_key(&mut self, key: KeyEvent) -> bool {
         match (key.code, key.modifiers) {
-            (KeyCode::Char('q'), KeyModifiers::CONTROL) => {
+            (KeyCode::Char('q' | 'Q'), KeyModifiers::CONTROL) => {
                 self.app.log("Exit requested");
                 return true;
             }
 
-            (KeyCode::Char('g'), KeyModifiers::CONTROL) => {
+            (KeyCode::Char('g' | 'G'), KeyModifiers::CONTROL) => {
                 self.app.log("Switching to game mode");
                 GameHandler::new(self.app).toggle_game_mode();
             }
 
-            (KeyCode::Char('s'), KeyModifiers::CONTROL) => {
+            (KeyCode::Char('s' | 'S'), KeyModifiers::CONTROL) => {
                 if self.app.mode == GameMode::Game {
                     self.app.log("Switching to solver mode");
                     self.app.mode = GameMode::Solver;
@@ -40,7 +40,7 @@ impl<'a> InputHandler<'a> {
                 }
             }
 
-            (KeyCode::Char('h'), KeyModifiers::CONTROL) => {
+            (KeyCode::Char('h' | 'H'), KeyModifiers::CONTROL) => {
                 if self.app.mode == GameMode::Game {
                     self.app.show_suggestions = !self.app.show_suggestions;
                     let status = if self.app.show_suggestions {
@@ -52,7 +52,7 @@ impl<'a> InputHandler<'a> {
                 }
             }
 
-            (KeyCode::Char('z'), KeyModifiers::CONTROL) => {
+            (KeyCode::Char('z' | 'Z'), KeyModifiers::CONTROL) => {
                 self.app.log("Undo requested");
                 if self.app.mode == GameMode::Solver {
                     SolverHandler::new(self.app).undo_guess();
