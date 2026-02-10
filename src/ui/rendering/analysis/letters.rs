@@ -1,10 +1,10 @@
 //! Letter frequency analysis rendering.
 
 use ratatui::{
-    Frame,
     style::{Color, Style},
     text::{Line, Span},
     widgets::{Block, Borders, Paragraph},
+    Frame,
 };
 
 use crate::ui::app::App;

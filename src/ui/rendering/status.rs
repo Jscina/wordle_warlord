@@ -1,9 +1,9 @@
 //! Status panel rendering for both game and solver modes.
 
 use ratatui::{
-    Frame,
     style::{Color, Style},
     widgets::{Block, Borders, Paragraph},
+    Frame,
 };
 
 use crate::ui::{app::App, types::GameMode};
@@ -11,7 +11,7 @@ use crate::ui::{app::App, types::GameMode};
 impl App {
     pub(in crate::ui) fn draw_mode_indicator(&self, f: &mut Frame, area: ratatui::layout::Rect) {
         let mode_text = format!(
-            "Mode: {} | Press Ctrl+G for Game Mode",
+            "Mode: {} | Press Ctrl+G for Game Mode | Ctrl+R for History",
             if self.mode == GameMode::Solver {
                 "Solver"
             } else {
@@ -46,7 +46,7 @@ impl App {
             }
         } else {
             format!(
-                "Guesses remaining: {} | Press Ctrl+S for Solver Mode",
+                "Guesses remaining: {} | Ctrl+S: Solver | Ctrl+R: History",
                 self.remaining_guesses
             )
         };

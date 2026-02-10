@@ -4,7 +4,7 @@ use std::{collections::HashSet, fmt::Display, io::Stdout};
 
 use anyhow::Result;
 use crossterm::event::{self, Event};
-use ratatui::{Terminal, backend::CrosstermBackend};
+use ratatui::{backend::CrosstermBackend, Terminal};
 use tracing::info;
 
 use crate::{
@@ -12,7 +12,10 @@ use crate::{
     solver::SolverState,
 };
 
-use super::types::{GameMode, LogBuffer};
+use super::{
+    history::{HistoryData, HistoryViewMode},
+    types::{GameMode, LogBuffer},
+};
 
 /// Main application state container.
 pub struct App {
@@ -27,6 +30,7 @@ pub struct App {
     pub(in crate::ui) game_won: bool,
     pub(in crate::ui) game_over: bool,
     pub(in crate::ui) show_suggestions: bool,
+    pub(in crate::ui) show_analysis: bool,
     pub(in crate::ui) letter_analysis: Option<LetterAnalysis>,
     pub(in crate::ui) position_analysis: Option<PositionAnalysis>,
     pub(in crate::ui) constraint_summary: Option<ConstraintSummary>,
@@ -34,6 +38,9 @@ pub struct App {
     pub(in crate::ui) entropy_history: Vec<f64>,
     pub(in crate::ui) analysis_dirty: bool,
     pub(in crate::ui) logs: LogBuffer,
+    pub(in crate::ui) history_data: Option<HistoryData>,
+    pub(in crate::ui) history_view_mode: HistoryViewMode,
+    pub(in crate::ui) history_page: usize,
 }
 
 impl App {
@@ -57,6 +64,7 @@ impl App {
             game_won: false,
             game_over: false,
             show_suggestions: true,
+            show_analysis: true,
             letter_analysis: None,
             position_analysis: None,
             constraint_summary: None,
@@ -64,6 +72,9 @@ impl App {
             entropy_history: Vec::new(),
             analysis_dirty: true,
             logs,
+            history_data: None,
+            history_view_mode: HistoryViewMode::Stats,
+            history_page: 0,
         }
     }
 

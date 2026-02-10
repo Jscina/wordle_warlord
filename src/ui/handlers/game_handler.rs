@@ -38,6 +38,7 @@ impl<'a> GameHandler<'a> {
                 self.app.game_won = false;
                 self.app.game_over = false;
                 self.app.show_suggestions = false;
+                self.app.show_analysis = false;
                 self.app.solver = SolverState::new(self.app.solver.word_len());
                 self.app.entropy_history.clear();
                 self.app.input.clear();
@@ -47,18 +48,6 @@ impl<'a> GameHandler<'a> {
             Err(_) => {
                 self.app.log("Failed to start new game: no words available");
             }
-        }
-    }
-
-    pub fn undo_guess(&mut self) {
-        if !self.app.solver.guesses().is_empty() {
-            self.app.solver.pop_guess();
-            self.app.remaining_guesses += 1;
-            self.app.game_won = false;
-            self.app.game_over = false;
-            SolverHandler::new(self.app).recompute();
-            SolverHandler::new(self.app).rebuild_entropy_history();
-            self.app.analysis_dirty = true;
         }
     }
 

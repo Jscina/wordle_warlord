@@ -1,9 +1,9 @@
 //! Input field rendering with validation status.
 
 use ratatui::{
-    Frame,
     style::{Color, Style},
     widgets::{Block, Borders, Paragraph},
+    Frame,
 };
 
 use crate::ui::{
@@ -25,12 +25,12 @@ impl App {
 
         let help_text = if self.mode == GameMode::Game {
             if self.game_over {
-                "Enter = new game | Ctrl+S = solver | Ctrl+Q = quit"
+                "Enter = new game | Ctrl+S = solver | Ctrl+R = history | Ctrl+Q = quit"
             } else {
-                "Enter = submit | Ctrl+H = toggle hints | Ctrl+S = solver | Ctrl+Q = quit"
+                "Enter = submit | Ctrl+H = hints | Ctrl+A = analysis | Ctrl+S = solver | Ctrl+R = history | Ctrl+Q = quit"
             }
         } else {
-            "Enter = submit | Ctrl+G = game | Ctrl+Z = undo | Ctrl+Q = quit"
+            "Enter = submit | Ctrl+G = game | Ctrl+Z = undo | Ctrl+R = history | Ctrl+Q = quit"
         };
 
         f.render_widget(

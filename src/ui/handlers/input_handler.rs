@@ -8,7 +8,7 @@ use super::super::{
     app::App,
     types::{GameMode, InputStatus, ParsedInput},
 };
-use super::{GameHandler, SolverHandler};
+use super::{GameHandler, HistoryHandler, SolverHandler};
 
 /// Helper struct for managing keyboard input and user interactions.
 pub struct InputHandler<'a> {
@@ -21,6 +21,11 @@ impl<'a> InputHandler<'a> {
     }
 
     pub fn handle_key(&mut self, key: KeyEvent) -> bool {
+        // Handle history mode navigation separately
+        if self.app.mode == GameMode::History {
+            return self.handle_history_key(key);
+        }
+
         match (key.code, key.modifiers) {
             (KeyCode::Char('q' | 'Q'), KeyModifiers::CONTROL) => {
                 self.app.log("Exit requested");
@@ -40,6 +45,11 @@ impl<'a> InputHandler<'a> {
                 }
             }
 
+            (KeyCode::Char('r' | 'R'), KeyModifiers::CONTROL) => {
+                self.app.log("Switching to history mode");
+                HistoryHandler::new(self.app).enter_history_mode();
+            }
+
             (KeyCode::Char('h' | 'H'), KeyModifiers::CONTROL) => {
                 if self.app.mode == GameMode::Game {
                     self.app.show_suggestions = !self.app.show_suggestions;
@@ -52,12 +62,23 @@ impl<'a> InputHandler<'a> {
                 }
             }
 
+            (KeyCode::Char('a' | 'A'), KeyModifiers::CONTROL) => {
+                if self.app.mode == GameMode::Game {
+                    self.app.show_analysis = !self.app.show_analysis;
+                    let status = if self.app.show_analysis {
+                        "shown"
+                    } else {
+                        "hidden"
+                    };
+                    self.app.log(format!("Analysis panels {}", status));
+                }
+            }
+
             (KeyCode::Char('z' | 'Z'), KeyModifiers::CONTROL) => {
-                self.app.log("Undo requested");
+                // Undo only works in Solver mode, not in Game mode
                 if self.app.mode == GameMode::Solver {
+                    self.app.log("Undo requested");
                     SolverHandler::new(self.app).undo_guess();
-                } else {
-                    GameHandler::new(self.app).undo_guess();
                 }
             }
 
@@ -68,6 +89,61 @@ impl<'a> InputHandler<'a> {
             (KeyCode::Char(c), _) => self.app.input.push(c),
             _ => {}
         }
+        false
+    }
+
+    fn handle_history_key(&mut self, key: KeyEvent) -> bool {
+        use super::super::history::HistoryViewMode;
+
+        match key.code {
+            KeyCode::Char('q' | 'Q') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                self.app.log("Exit requested");
+                return true;
+            }
+
+            KeyCode::Char('r' | 'R') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                self.app.log("Returning to solver mode");
+                HistoryHandler::new(self.app).exit_history_mode();
+            }
+
+            KeyCode::Tab => {
+                HistoryHandler::new(self.app).cycle_view_mode();
+            }
+
+            KeyCode::PageDown => {
+                if self.app.history_view_mode == HistoryViewMode::List {
+                    HistoryHandler::new(self.app).next_page();
+                }
+            }
+
+            KeyCode::PageUp => {
+                if self.app.history_view_mode == HistoryViewMode::List {
+                    HistoryHandler::new(self.app).prev_page();
+                }
+            }
+
+            KeyCode::Esc => match self.app.history_view_mode {
+                HistoryViewMode::Detail => {
+                    HistoryHandler::new(self.app).return_to_list();
+                }
+                HistoryViewMode::List => {
+                    HistoryHandler::new(self.app).return_to_stats();
+                }
+                _ => {}
+            },
+
+            KeyCode::Char(c @ '0'..='9') => {
+                if self.app.history_view_mode == HistoryViewMode::List {
+                    let index = c.to_digit(10).unwrap() as usize;
+                    if index > 0 && index <= 10 {
+                        HistoryHandler::new(self.app).select_game_on_page(index - 1);
+                    }
+                }
+            }
+
+            _ => {}
+        }
+
         false
     }
 

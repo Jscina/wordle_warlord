@@ -66,4 +66,5 @@ pub enum ParsedInput {
 pub enum GameMode {
     Solver,
     Game,
+    History,
 }
