@@ -217,9 +217,7 @@ impl App {
         let word = parts[0].to_lowercase();
         let pattern = parts[1];
 
-        if word.len() != self.solver.word_len() {
-            return ParsedInput::Invalid;
-        } else if !self.allowed_lookup.contains(&word) {
+        if word.len() != self.solver.word_len() || !self.allowed_lookup.contains(&word) {
             return ParsedInput::Invalid;
         }
 
@@ -484,7 +482,7 @@ impl App {
             .direction(Direction::Vertical)
             .constraints([
                 Constraint::Length(8),
-                Constraint::Length(8),
+                Constraint::Length(9),
                 Constraint::Length(8),
                 Constraint::Length(12),
                 Constraint::Min(6), // logs panel
