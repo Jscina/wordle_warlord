@@ -96,6 +96,7 @@ pub struct App {
     remaining_guesses: usize,
     game_won: bool,
     game_over: bool,
+    show_suggestions: bool,
     letter_analysis: Option<LetterAnalysis>,
     position_analysis: Option<PositionAnalysis>,
     constraint_summary: Option<ConstraintSummary>,
@@ -125,6 +126,7 @@ impl App {
             remaining_guesses: 6,
             game_won: false,
             game_over: false,
+            show_suggestions: true,
             letter_analysis: None,
             position_analysis: None,
             constraint_summary: None,
@@ -174,6 +176,14 @@ impl App {
                     self.log("Switching to solver mode");
                     self.mode = GameMode::Solver;
                     self.recompute();
+                }
+            }
+
+            (KeyCode::Char('h'), KeyModifiers::CONTROL) => {
+                if self.mode == GameMode::Game {
+                    self.show_suggestions = !self.show_suggestions;
+                    let status = if self.show_suggestions { "shown" } else { "hidden" };
+                    self.log(format!("Suggestions {}", status));
                 }
             }
 
@@ -418,6 +428,7 @@ impl App {
                 self.remaining_guesses = 6;
                 self.game_won = false;
                 self.game_over = false;
+                self.show_suggestions = false;
                 self.solver = SolverState::new(self.solver.word_len());
                 self.entropy_history.clear();
                 self.input.clear();
@@ -468,15 +479,29 @@ impl App {
             .constraints([Constraint::Percentage(55), Constraint::Percentage(45)])
             .split(f.area());
 
-        let left_layout = Layout::default()
-            .direction(Direction::Vertical)
-            .constraints([
-                Constraint::Length(3),
-                Constraint::Length(8),
-                Constraint::Min(5),
-                Constraint::Length(3),
-            ])
-            .split(main_layout[0]);
+        // Dynamically adjust left layout based on whether suggestions should be shown
+        let show_suggestions_panel = self.mode == GameMode::Solver || self.show_suggestions;
+        
+        let left_layout = if show_suggestions_panel {
+            Layout::default()
+                .direction(Direction::Vertical)
+                .constraints([
+                    Constraint::Length(3),
+                    Constraint::Length(8),
+                    Constraint::Min(5),
+                    Constraint::Length(3),
+                ])
+                .split(main_layout[0])
+        } else {
+            Layout::default()
+                .direction(Direction::Vertical)
+                .constraints([
+                    Constraint::Length(3),
+                    Constraint::Length(8),
+                    Constraint::Length(3),
+                ])
+                .split(main_layout[0])
+        };
 
         let right_layout = Layout::default()
             .direction(Direction::Vertical)
@@ -496,8 +521,13 @@ impl App {
         }
 
         self.draw_guesses(f, left_layout[1]);
-        self.draw_suggestions(f, left_layout[2]);
-        self.draw_input(f, left_layout[3]);
+        
+        if show_suggestions_panel {
+            self.draw_suggestions(f, left_layout[2]);
+            self.draw_input(f, left_layout[3]);
+        } else {
+            self.draw_input(f, left_layout[2]);
+        }
 
         self.draw_letter_analysis(f, right_layout[0]);
         self.draw_position_analysis(f, right_layout[1]);
@@ -569,7 +599,7 @@ impl App {
             if self.game_over {
                 "Enter = new game | Ctrl+S = solver | Ctrl+Q = quit"
             } else {
-                "Enter = submit guess | Ctrl+S = solver | Ctrl+Q = quit"
+                "Enter = submit | Ctrl+H = toggle hints | Ctrl+S = solver | Ctrl+Q = quit"
             }
         } else {
             "Enter = submit | Ctrl+G = game | Ctrl+Z = undo | Ctrl+Q = quit"
