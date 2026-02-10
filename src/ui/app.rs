@@ -1,0 +1,94 @@
+//! Core application state and lifecycle management.
+
+use std::{collections::HashSet, fmt::Display, io::Stdout};
+
+use anyhow::Result;
+use crossterm::event::{self, Event};
+use ratatui::{Terminal, backend::CrosstermBackend};
+use tracing::info;
+
+use crate::{
+    analysis::{ConstraintSummary, LetterAnalysis, PositionAnalysis, SolutionPoolStats},
+    solver::SolverState,
+};
+
+use super::types::{GameMode, LogBuffer};
+
+/// Main application state container.
+pub struct App {
+    pub(in crate::ui) solution_words: Vec<String>,
+    pub(in crate::ui) allowed_lookup: HashSet<String>,
+    pub(in crate::ui) solver: SolverState,
+    pub(in crate::ui) input: String,
+    pub(in crate::ui) suggestions: Vec<(String, usize)>,
+    pub(in crate::ui) mode: GameMode,
+    pub(in crate::ui) target_word: Option<String>,
+    pub(in crate::ui) remaining_guesses: usize,
+    pub(in crate::ui) game_won: bool,
+    pub(in crate::ui) game_over: bool,
+    pub(in crate::ui) show_suggestions: bool,
+    pub(in crate::ui) letter_analysis: Option<LetterAnalysis>,
+    pub(in crate::ui) position_analysis: Option<PositionAnalysis>,
+    pub(in crate::ui) constraint_summary: Option<ConstraintSummary>,
+    pub(in crate::ui) solution_pool_stats: Option<SolutionPoolStats>,
+    pub(in crate::ui) entropy_history: Vec<f64>,
+    pub(in crate::ui) analysis_dirty: bool,
+    pub(in crate::ui) logs: LogBuffer,
+}
+
+impl App {
+    pub fn new(
+        words: Vec<String>,
+        solution_words: Vec<String>,
+        word_len: usize,
+        logs: LogBuffer,
+    ) -> Self {
+        let allowed_lookup: HashSet<String> = words.iter().cloned().collect();
+
+        Self {
+            solution_words,
+            allowed_lookup,
+            solver: SolverState::new(word_len),
+            input: String::new(),
+            suggestions: Vec::new(),
+            mode: GameMode::Solver,
+            target_word: None,
+            remaining_guesses: 6,
+            game_won: false,
+            game_over: false,
+            show_suggestions: true,
+            letter_analysis: None,
+            position_analysis: None,
+            constraint_summary: None,
+            solution_pool_stats: None,
+            entropy_history: Vec::new(),
+            analysis_dirty: true,
+            logs,
+        }
+    }
+
+    pub fn run(&mut self, terminal: &mut Terminal<CrosstermBackend<Stdout>>) -> Result<()> {
+        info!("UI started");
+        self.log("UI started");
+
+        loop {
+            // Recompute analysis if needed
+            super::handlers::SolverHandler::new(self).recompute_analysis();
+
+            terminal.draw(|f| self.draw(f))?;
+
+            let event = event::read()?;
+            if let Event::Key(key) = event {
+                // Use InputHandler to process keyboard input
+                if super::handlers::InputHandler::new(self).handle_key(key) {
+                    return Ok(());
+                }
+            }
+        }
+    }
+
+    pub(in crate::ui) fn log(&self, msg: impl Into<String> + Display) {
+        tracing::info!("{}", &msg);
+        self.logs.push(msg.into());
+    }
+}
