@@ -18,6 +18,22 @@ What started as "I could just grep this" turned into "okay, let's actually do it
 
 ![Game Mode](assets/game-mode.png)
 
+## Game Statistics
+
+![Game Statistics](assets/game-stats.png)
+
+## Solver Statistics
+
+![Solver Statistics](assets/solver-stats.png)
+
+## Game History
+
+![Game History](assets/game-history.png)
+
+## Previous Game Detail
+
+![Previous Game](assets/previous-game.png)
+
 ---
 
 ## What This Is (and Isn't)
