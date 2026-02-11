@@ -2,7 +2,11 @@
 
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
-use crate::solver::{generate_feedback, parse_pattern, Guess};
+use crate::{
+    analysis::compute_solution_pool_stats,
+    scoring::{get_optimal_word, score_and_sort},
+    solver::{generate_feedback, parse_pattern, Guess},
+};
 
 use super::super::{
     app::App,
@@ -283,13 +287,89 @@ impl<'a> InputHandler<'a> {
                 return;
             }
 
+            // Calculate pool size and optimal word BEFORE applying the guess
+            let remaining_before = self.app.solver.filter(&self.app.solution_words);
+            let pool_size_before = remaining_before.len();
+
+            // Get optimal word at this step (before applying the guess)
+            let optimal = get_optimal_word(&remaining_before[..], &self.app.allowed_lookup);
+            let (optimal_word, optimal_score) = optimal.unwrap_or((String::from("-----"), 0));
+
+            // Get the score of the actual word chosen
+            let actual_score = if pool_size_before > 0 {
+                let scored = score_and_sort(&remaining_before[..], &self.app.allowed_lookup);
+                scored
+                    .iter()
+                    .find(|(w, _)| w == &word)
+                    .map(|(_, s)| *s)
+                    .unwrap_or(0)
+            } else {
+                0
+            };
+
+            // Add the guess
             let guess = Guess::new(word.clone(), feedback.clone());
-            self.app
-                .log(format!("Solver guess submitted: {} {:?}", &word, feedback));
             self.app.solver.add_guess(guess);
+
+            // Calculate pool size and entropy AFTER applying the guess
+            let remaining_after = self.app.solver.filter(&self.app.solution_words);
+            let pool_size_after = remaining_after.len();
+            let stats = compute_solution_pool_stats(&self.app.solution_words, &remaining_after);
+            let entropy = stats.entropy;
+
+            // Calculate deviation: positive means actual is better, negative means optimal was better
+            // Using score difference as a proxy for entropy difference
+            let score_deviation = actual_score as f64 - optimal_score as f64;
+
+            // Log with detailed solver session information
+            if self.app.solver_session_active && !self.app.solver_session_paused {
+                self.app.log(format!(
+                    "Solver guess: {} (pool: {}→{}, entropy: {:.2}, optimal: {}, deviation: {:.2})",
+                    &word,
+                    pool_size_before,
+                    pool_size_after,
+                    entropy,
+                    optimal_word,
+                    score_deviation
+                ));
+            } else {
+                self.app
+                    .log(format!("Solver guess submitted: {} {:?}", &word, feedback));
+            }
 
             SolverHandler::new(self.app).recompute();
             self.app.input.clear();
+
+            // Check for session completion: pool narrowed to 1 OR all green feedback
+            let all_green = feedback
+                .iter()
+                .all(|f| *f == crate::solver::Feedback::Green);
+            if self.app.solver_session_active
+                && !self.app.solver_session_paused
+                && (pool_size_after == 1 || all_green)
+            {
+                let guess_count = self.app.solver.guesses().len();
+                self.app
+                    .log(format!("Solver session completed: {} guesses", guess_count));
+                self.reset_solver_and_start_new_session();
+            }
         }
+    }
+
+    /// Resets the solver state and starts a new session
+    fn reset_solver_and_start_new_session(&mut self) {
+        let word_len = self.app.solver.word_len();
+
+        // Clear solver state
+        self.app.solver = crate::solver::SolverState::new(word_len);
+        self.app.entropy_history.clear();
+        self.app.suggestions.clear();
+        self.app.analysis_dirty = true;
+
+        // Start new session
+        self.app.solver_session_active = true;
+        self.app.solver_session_paused = false;
+        self.app.solver_session_start = Some(chrono::Utc::now());
+        self.app.log("Solver session started");
     }
 }

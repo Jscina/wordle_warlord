@@ -98,8 +98,15 @@ fn draw_overall_stats(f: &mut Frame, area: Rect, stats: &crate::ui::history::His
             ),
             Span::raw("  |  Losses: "),
             Span::styled(
-                format!("{}", stats.losses + stats.abandoned),
+                format!("{}", stats.losses),
                 Style::default().fg(Color::Red).add_modifier(Modifier::BOLD),
+            ),
+            Span::raw("  |  Abandoned: "),
+            Span::styled(
+                format!("{}", stats.abandoned),
+                Style::default()
+                    .fg(Color::Gray)
+                    .add_modifier(Modifier::BOLD),
             ),
         ]),
         Line::from(""),

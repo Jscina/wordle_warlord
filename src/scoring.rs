@@ -30,6 +30,12 @@ pub fn score_and_sort(words: &[&String], solutions: &HashSet<String>) -> Vec<(St
     scored
 }
 
+/// Returns the best word (highest score) from the given words
+pub fn get_optimal_word(words: &[&String], solutions: &HashSet<String>) -> Option<(String, usize)> {
+    let scored = score_and_sort(words, solutions);
+    scored.first().cloned()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

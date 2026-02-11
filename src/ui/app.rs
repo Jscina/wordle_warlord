@@ -3,6 +3,7 @@
 use std::{collections::HashSet, fmt::Display, io::Stdout};
 
 use anyhow::Result;
+use chrono::{DateTime, Utc};
 use crossterm::event::{self, Event};
 use ratatui::{backend::CrosstermBackend, Terminal};
 use tracing::info;
@@ -41,6 +42,9 @@ pub struct App {
     pub(in crate::ui) history_data: Option<HistoryData>,
     pub(in crate::ui) history_view_mode: HistoryViewMode,
     pub(in crate::ui) history_page: usize,
+    pub(in crate::ui) solver_session_active: bool,
+    pub(in crate::ui) solver_session_start: Option<DateTime<Utc>>,
+    pub(in crate::ui) solver_session_paused: bool,
 }
 
 impl App {
@@ -75,12 +79,20 @@ impl App {
             history_data: None,
             history_view_mode: HistoryViewMode::Stats,
             history_page: 0,
+            solver_session_active: true, // Start with session active since we're in Solver mode
+            solver_session_start: Some(Utc::now()),
+            solver_session_paused: false,
         }
     }
 
     pub fn run(&mut self, terminal: &mut Terminal<CrosstermBackend<Stdout>>) -> Result<()> {
         info!("UI started");
         self.log("UI started");
+
+        // Log solver session start (app starts in Solver mode)
+        if self.solver_session_active {
+            self.log("Solver session started");
+        }
 
         loop {
             // Recompute analysis if needed

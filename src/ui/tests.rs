@@ -431,7 +431,7 @@ mod history_handler_tests {
                 outcome: GameOutcome::Lost,
             },
         ];
-        HistoryData::new(games)
+        HistoryData::new(games, Vec::new())
     }
 
     #[test]
@@ -475,7 +475,8 @@ mod history_handler_tests {
 
         HistoryHandler::new(&mut app).cycle_view_mode();
 
-        assert_eq!(app.history_view_mode, HistoryViewMode::Stats);
+        // With the new Solver view, List cycles to Solver when no game is selected
+        assert_eq!(app.history_view_mode, HistoryViewMode::Solver);
     }
 
     #[test]

@@ -64,6 +64,11 @@ impl<'a> SolverHandler<'a> {
 
     pub fn undo_guess(&mut self) {
         if !self.app.solver.guesses().is_empty() {
+            if self.app.solver_session_active && !self.app.solver_session_paused {
+                // Log undo in solver session
+                let last_guess = self.app.solver.guesses().last().unwrap();
+                tracing::info!("Solver undo: removed guess {}", last_guess.word);
+            }
             self.app.solver.pop_guess();
             self.recompute();
             self.rebuild_entropy_history();

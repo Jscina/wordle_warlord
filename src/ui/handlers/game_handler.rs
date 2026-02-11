@@ -2,6 +2,7 @@ use crate::{
     solver::{Feedback, SolverState},
     wordlist::select_random_word,
 };
+use chrono::Utc;
 
 use super::super::{app::App, types::GameMode};
 
@@ -18,9 +19,26 @@ impl<'a> GameHandler<'a> {
     pub fn toggle_game_mode(&mut self) {
         if self.app.mode == GameMode::Solver {
             self.app.log("Starting new game");
+
+            // End any active solver session
+            if self.app.solver_session_active {
+                self.app.log("Solver session abandoned");
+                self.app.solver_session_active = false;
+                self.app.solver_session_start = None;
+                self.app.solver_session_paused = false; // Reset pause state
+            }
+
             self.start_new_game();
         } else {
+            self.app.log("Switching to solver mode");
             self.app.mode = GameMode::Solver;
+
+            // Start a new solver session
+            self.app.solver_session_active = true;
+            self.app.solver_session_start = Some(Utc::now());
+            self.app.solver_session_paused = false; // Ensure not paused
+            self.app.log("Solver session started");
+
             SolverHandler::new(self.app).recompute();
             self.app.analysis_dirty = true;
         }

@@ -4,6 +4,8 @@ use chrono::{DateTime, Utc};
 
 use crate::solver::Feedback;
 
+use super::solver_types::{SolverSession, SolverStats};
+
 /// Outcome of a completed or abandoned game.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum GameOutcome {
@@ -110,7 +112,8 @@ impl HistoryStats {
         stats.current_streak = current_streak;
         stats.best_win_streak = best_win_streak;
 
-        let completed_games = stats.wins + stats.losses + stats.abandoned;
+        // Calculate win rate excluding abandoned games
+        let completed_games = stats.wins + stats.losses;
         if completed_games > 0 {
             stats.win_rate = (stats.wins as f64 / completed_games as f64) * 100.0;
         }
@@ -129,6 +132,7 @@ pub enum HistoryViewMode {
     Stats,  // Statistics dashboard
     List,   // Paginated game list
     Detail, // Single game detail view
+    Solver, // Solver statistics view
 }
 
 /// Container for all history data.
@@ -136,15 +140,20 @@ pub enum HistoryViewMode {
 pub struct HistoryData {
     pub games: Vec<GameRecord>,
     pub stats: HistoryStats,
+    pub solver_sessions: Vec<SolverSession>,
+    pub solver_stats: SolverStats,
     pub selected_game_index: Option<usize>,
 }
 
 impl HistoryData {
-    pub fn new(games: Vec<GameRecord>) -> Self {
+    pub fn new(games: Vec<GameRecord>, sessions: Vec<SolverSession>) -> Self {
         let stats = HistoryStats::from_games(&games);
+        let solver_stats = SolverStats::from_sessions(&sessions);
         Self {
             games,
             stats,
+            solver_sessions: sessions,
+            solver_stats,
             selected_game_index: None,
         }
     }
