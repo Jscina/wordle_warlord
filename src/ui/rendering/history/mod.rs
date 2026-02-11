@@ -1,13 +1,11 @@
-//! History mode rendering coordinator.
-
 mod detail_view;
 mod list_view;
 mod solver_view;
 mod stats_view;
 
-use ratatui::{layout::Rect, Frame};
+use ratatui::{Frame, layout::Rect};
 
-use crate::ui::{history::HistoryViewMode, App};
+use crate::ui::{App, history::HistoryViewMode};
 
 impl App {
     pub(in crate::ui) fn draw_history_mode(&self, f: &mut Frame, area: Rect) {

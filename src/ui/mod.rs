@@ -1,8 +1,3 @@
-//! User interface module for Wordle Warlord.
-//!
-//! This module provides a terminal-based UI for both playing Wordle
-//! and using the solver assistance mode.
-
 mod app;
 mod handlers;
 mod history;
@@ -17,9 +12,9 @@ pub use types::{GameMode, InputStatus, LogBuffer, ParsedInput};
 use anyhow::Result;
 use crossterm::{
     execute,
-    terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
+    terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
 };
-use ratatui::{backend::CrosstermBackend, Terminal};
+use ratatui::{Terminal, backend::CrosstermBackend};
 use std::io::stdout;
 
 use crate::wordlist::{load_solutions, load_words};

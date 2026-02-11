@@ -1,8 +1,6 @@
-//! Word suggestions rendering.
-
 use ratatui::{
-    widgets::{Block, Borders, List, ListItem},
     Frame,
+    widgets::{Block, Borders, List, ListItem},
 };
 
 use crate::ui::app::App;

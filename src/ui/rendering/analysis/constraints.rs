@@ -1,10 +1,8 @@
-//! Constraint summary rendering (green/yellow/gray feedback).
-
 use ratatui::{
+    Frame,
     style::{Color, Style},
     text::{Line, Span},
     widgets::{Block, Borders, Paragraph},
-    Frame,
 };
 
 use crate::ui::app::App;

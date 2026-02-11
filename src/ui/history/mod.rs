@@ -1,8 +1,3 @@
-//! Game history tracking and display.
-//!
-//! This module provides functionality for parsing game logs and displaying
-//! historical game data, statistics, and performance analytics.
-
 mod parser;
 mod solver_types;
 mod types;

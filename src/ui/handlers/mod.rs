@@ -1,5 +1,3 @@
-//! Handler modules for managing user input, game state, and solver state.
-
 mod game_handler;
 mod history_handler;
 mod input_handler;

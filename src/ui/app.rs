@@ -1,11 +1,9 @@
-//! Core application state and lifecycle management.
-
 use std::{collections::HashSet, fmt::Display, io::Stdout};
 
 use anyhow::Result;
 use chrono::{DateTime, Utc};
 use crossterm::event::{self, Event};
-use ratatui::{backend::CrosstermBackend, Terminal};
+use ratatui::{Terminal, backend::CrosstermBackend};
 use tracing::info;
 
 use crate::{

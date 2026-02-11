@@ -1,11 +1,9 @@
-//! Statistics dashboard rendering for history mode.
-
 use ratatui::{
+    Frame,
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
     widgets::{Block, Borders, Paragraph, Row, Table},
-    Frame,
 };
 
 use crate::ui::App;

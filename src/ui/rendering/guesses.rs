@@ -1,10 +1,8 @@
-//! Guess history rendering with colored feedback.
-
 use ratatui::{
+    Frame,
     style::{Color, Style},
     text::{Line, Span},
     widgets::{Block, Borders, Paragraph},
-    Frame,
 };
 
 use crate::{solver::Feedback, ui::app::App};

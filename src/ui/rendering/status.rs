@@ -1,9 +1,7 @@
-//! Status panel rendering for both game and solver modes.
-
 use ratatui::{
+    Frame,
     style::{Color, Style},
     widgets::{Block, Borders, Paragraph},
-    Frame,
 };
 
 use crate::ui::{app::App, types::GameMode};

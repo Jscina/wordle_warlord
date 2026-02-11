@@ -1,9 +1,7 @@
-//! Solution pool statistics and entropy graph rendering.
-
 use ratatui::{
+    Frame,
     text::Line,
     widgets::{Block, Borders, Paragraph},
-    Frame,
 };
 
 use crate::ui::app::App;

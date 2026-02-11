@@ -1,11 +1,9 @@
-//! Game list view rendering for history mode.
-
 use ratatui::{
+    Frame,
     layout::{Constraint, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
     widgets::{Block, Borders, Paragraph, Row, Table},
-    Frame,
 };
 
 use crate::ui::App;

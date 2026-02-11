@@ -1,9 +1,7 @@
-//! Position-based letter analysis rendering.
-
 use ratatui::{
+    Frame,
     text::Line,
     widgets::{Block, Borders, Paragraph},
-    Frame,
 };
 
 use crate::ui::app::App;

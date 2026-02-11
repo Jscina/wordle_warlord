@@ -1,11 +1,3 @@
-//! Type definitions for the UI module.
-//!
-//! This module contains common types used across the UI including:
-//! - `LogBuffer`: Thread-safe circular log buffer
-//! - `InputStatus`: Input validation states
-//! - `ParsedInput`: Input parsing results
-//! - `GameMode`: Application operating mode
-
 use std::sync::{Arc, Mutex};
 
 use crate::solver::Feedback;

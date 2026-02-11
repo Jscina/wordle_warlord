@@ -1,5 +1,3 @@
-//! Main rendering orchestration and layout management.
-
 pub mod analysis;
 mod guesses;
 mod history;
@@ -9,8 +7,8 @@ mod status;
 mod suggestions;
 
 use ratatui::{
-    layout::{Constraint, Direction, Layout},
     Frame,
+    layout::{Constraint, Direction, Layout},
 };
 
 use crate::ui::{app::App, types::GameMode};

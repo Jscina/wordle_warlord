@@ -94,8 +94,10 @@ impl SolverStats {
             return Self::default();
         }
 
-        let mut stats = Self::default();
-        stats.total_sessions = sessions.len();
+        let mut stats = Self {
+            total_sessions: sessions.len(),
+            ..Default::default()
+        };
 
         let mut total_guesses = 0;
         let mut total_entropy = 0.0;

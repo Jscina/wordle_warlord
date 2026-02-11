@@ -63,8 +63,10 @@ impl HistoryStats {
             return Self::default();
         }
 
-        let mut stats = Self::default();
-        stats.total_games = games.len();
+        let mut stats = Self {
+            total_games: games.len(),
+            ..Default::default()
+        };
 
         let mut total_guesses_for_wins = 0;
         let mut current_streak = 0;
@@ -78,7 +80,7 @@ impl HistoryStats {
                     total_guesses_for_wins += guesses;
 
                     // Update guess distribution (1-indexed to 0-indexed)
-                    if guesses >= 1 && guesses <= 6 {
+                    if (1..=6).contains(&guesses) {
                         stats.guess_distribution[guesses - 1] += 1;
                     }
 
@@ -163,7 +165,7 @@ impl HistoryData {
         if self.games.is_empty() {
             1
         } else {
-            (self.games.len() + 9) / 10 // Ceiling division
+            self.games.len().div_ceil(10) // Ceiling division
         }
     }
 

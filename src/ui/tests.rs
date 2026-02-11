@@ -1,5 +1,3 @@
-//! UI module tests.
-
 use super::{
     app::App,
     handlers::{GameHandler, HistoryHandler, InputHandler, SolverHandler},

@@ -1,8 +1,6 @@
-//! History mode state management.
-
 use super::super::{
     app::App,
-    history::{parse_game_history, parse_solver_history, HistoryData, HistoryViewMode},
+    history::{HistoryData, HistoryViewMode, parse_game_history, parse_solver_history},
     types::GameMode,
 };
 
@@ -116,11 +114,11 @@ impl<'a> HistoryHandler<'a> {
     /// Select a game at the given index on the current page.
     pub fn select_game_on_page(&mut self, page_index: usize) {
         let global_index = self.app.history_page * 10 + page_index;
-        if let Some(ref mut data) = self.app.history_data {
-            if global_index < data.games.len() {
-                data.select_game(global_index);
-                self.app.history_view_mode = HistoryViewMode::Detail;
-            }
+        if let Some(ref mut data) = self.app.history_data
+            && global_index < data.games.len()
+        {
+            data.select_game(global_index);
+            self.app.history_view_mode = HistoryViewMode::Detail;
         }
     }
 

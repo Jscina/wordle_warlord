@@ -1,5 +1,3 @@
-//! Log file parser for extracting game history.
-
 use std::fs;
 use std::path::Path;
 
@@ -25,12 +23,13 @@ pub fn parse_game_history(logs_dir: &str) -> Result<Vec<GameRecord>, String> {
         Ok(entries) => {
             for entry in entries.flatten() {
                 let path = entry.path();
-                if let Some(filename) = path.file_name() {
-                    if let Some(name) = filename.to_str() {
-                        if name.starts_with("wordle-warlord.log") {
-                            log_files.push(path);
-                        }
-                    }
+                if path
+                    .file_name()
+                    .and_then(|f| f.to_str())
+                    .filter(|name| name.starts_with("wordle-warlord.log"))
+                    .is_some()
+                {
+                    log_files.push(path);
                 }
             }
         }
@@ -95,13 +94,13 @@ fn parse_log_file(path: &Path) -> Result<Vec<GameRecord>, String> {
         }
 
         // Check for guess submission (only in Game mode)
-        if current_mode == "Game" {
-            if let Some(word) = extract_game_guess(line) {
-                if let Some((_, _, ref mut guesses)) = current_game {
-                    guesses.push(word);
-                }
-                continue;
+        if current_mode == "Game"
+            && let Some(word) = extract_game_guess(line)
+        {
+            if let Some((_, _, ref mut guesses)) = current_game {
+                guesses.push(word);
             }
+            continue;
         }
 
         // Check for undo request (only in Game mode, and only if we have a current game)
@@ -215,12 +214,10 @@ pub fn parse_solver_history(logs_dir: &str) -> Result<Vec<SolverSession>, String
         Ok(entries) => {
             for entry in entries.flatten() {
                 let path = entry.path();
-                if let Some(filename) = path.file_name() {
-                    if let Some(name) = filename.to_str() {
-                        if name.starts_with("wordle-warlord.log") {
-                            log_files.push(path);
-                        }
-                    }
+                if let Some(name) = path.file_name().and_then(|f| f.to_str())
+                    && name.starts_with("wordle-warlord.log")
+                {
+                    log_files.push(path);
                 }
             }
         }
@@ -303,10 +300,10 @@ fn parse_solver_sessions_from_file(path: &Path) -> Result<Vec<SolverSession>, St
 
         // Parse solver guess
         if line.contains("Solver guess:") {
-            if let Some(guess) = parse_solver_guess_line(line) {
-                if let Some((_, ref mut guesses)) = current_session {
-                    guesses.push(guess);
-                }
+            if let Some(guess) = parse_solver_guess_line(line)
+                && let Some((_, ref mut guesses)) = current_session
+            {
+                guesses.push(guess);
             }
             continue;
         }
@@ -345,7 +342,7 @@ fn parse_solver_guess_line(line: &str) -> Option<SolverGuess> {
     let pool_end = line[pool_start..].find(",")?;
     let pool_str = &line[pool_start..pool_start + pool_end];
     let pools: Vec<&str> = pool_str.split('→').collect();
-    let pool_before = pools.get(0)?.parse::<usize>().ok()?;
+    let pool_before = pools.first()?.parse::<usize>().ok()?;
     let pool_after = pools.get(1)?.parse::<usize>().ok()?;
 
     // Extract entropy

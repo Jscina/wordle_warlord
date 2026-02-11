@@ -1,9 +1,7 @@
-//! Input field rendering with validation status.
-
 use ratatui::{
+    Frame,
     style::{Color, Style},
     widgets::{Block, Borders, Paragraph},
-    Frame,
 };
 
 use crate::ui::{

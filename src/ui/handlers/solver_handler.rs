@@ -1,5 +1,3 @@
-//! Solver mode state management and analysis computation.
-
 use crate::{
     analysis::{
         compute_constraint_summary, compute_letter_analysis, compute_position_analysis,
