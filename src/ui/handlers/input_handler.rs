@@ -5,7 +5,7 @@ use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use crate::{
     analysis::compute_solution_pool_stats,
     scoring::{get_optimal_word, score_and_sort},
-    solver::{generate_feedback, parse_pattern, Guess},
+    solver::{Guess, generate_feedback, parse_pattern},
 };
 
 use super::super::{
