@@ -1,0 +1,241 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    name: Build ${{ matrix.target }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Linux x86_64
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            archive: tar.gz
+            
+          # Linux aarch64
+          - os: ubuntu-latest
+            target: aarch64-unknown-linux-gnu
+            archive: tar.gz
+            
+          # macOS x86_64 (Intel)
+          - os: macos-latest
+            target: x86_64-apple-darwin
+            archive: zip
+            
+          # macOS aarch64 (Apple Silicon)
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            archive: zip
+            
+          # Windows x86_64
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            archive: zip
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+          target: ${{ matrix.target }}
+          override: true
+
+      - name: Install cross-compilation tools (Linux aarch64)
+        if: matrix.target == 'aarch64-unknown-linux-gnu'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-aarch64-linux-gnu
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/registry
+          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Cache cargo index
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/git
+          key: ${{ runner.os }}-cargo-index-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Cache cargo build
+        uses: actions/cache@v4
+        with:
+          path: target
+          key: ${{ runner.os }}-${{ matrix.target }}-cargo-build-target-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Build release binary
+        uses: actions-rs/cargo@v1
+        with:
+          command: build
+          args: --release --target ${{ matrix.target }} --verbose
+        env:
+          CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: aarch64-linux-gnu-gcc
+
+      - name: Strip binary (Linux/macOS)
+        if: runner.os != 'Windows'
+        run: |
+          if [ "${{ matrix.target }}" = "aarch64-unknown-linux-gnu" ]; then
+            aarch64-linux-gnu-strip target/${{ matrix.target }}/release/wordle-warlord
+          else
+            strip target/${{ matrix.target }}/release/wordle-warlord
+          fi
+
+      - name: Get version from tag
+        id: version
+        shell: bash
+        run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+
+      - name: Create archive name
+        id: archive
+        shell: bash
+        run: |
+          ARCHIVE_NAME="wordle-warlord-${{ steps.version.outputs.VERSION }}-${{ matrix.target }}"
+          echo "NAME=${ARCHIVE_NAME}" >> $GITHUB_OUTPUT
+
+      - name: Package binary (tar.gz)
+        if: matrix.archive == 'tar.gz'
+        shell: bash
+        run: |
+          mkdir -p dist
+          cp target/${{ matrix.target }}/release/wordle-warlord dist/
+          cp README.md LICENSE dist/
+          cd dist
+          tar czf ${{ steps.archive.outputs.NAME }}.tar.gz wordle-warlord README.md LICENSE
+          sha256sum ${{ steps.archive.outputs.NAME }}.tar.gz > ${{ steps.archive.outputs.NAME }}.tar.gz.sha256
+          cd ..
+          mv dist/${{ steps.archive.outputs.NAME }}.tar.gz .
+          mv dist/${{ steps.archive.outputs.NAME }}.tar.gz.sha256 .
+
+      - name: Package binary (zip - Unix)
+        if: matrix.archive == 'zip' && runner.os != 'Windows'
+        shell: bash
+        run: |
+          mkdir -p dist
+          cp target/${{ matrix.target }}/release/wordle-warlord dist/
+          cp README.md LICENSE dist/
+          cd dist
+          zip -r ${{ steps.archive.outputs.NAME }}.zip wordle-warlord README.md LICENSE
+          shasum -a 256 ${{ steps.archive.outputs.NAME }}.zip > ${{ steps.archive.outputs.NAME }}.zip.sha256
+          cd ..
+          mv dist/${{ steps.archive.outputs.NAME }}.zip .
+          mv dist/${{ steps.archive.outputs.NAME }}.zip.sha256 .
+
+      - name: Package binary (zip - Windows)
+        if: matrix.archive == 'zip' && runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path dist
+          Copy-Item target/${{ matrix.target }}/release/wordle-warlord.exe dist/
+          Copy-Item README.md, LICENSE dist/
+          Compress-Archive -Path dist/* -DestinationPath ${{ steps.archive.outputs.NAME }}.zip
+          $hash = (Get-FileHash -Algorithm SHA256 ${{ steps.archive.outputs.NAME }}.zip).Hash.ToLower()
+          "$hash  ${{ steps.archive.outputs.NAME }}.zip" | Out-File -Encoding ASCII ${{ steps.archive.outputs.NAME }}.zip.sha256
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.archive.outputs.NAME }}
+          path: |
+            ${{ steps.archive.outputs.NAME }}.*
+          retention-days: 1
+
+  release:
+    name: Create Release
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Prepare release assets
+        run: |
+          mkdir -p release-assets
+          find artifacts -type f -name "wordle-warlord-*" -exec cp {} release-assets/ \;
+          ls -lh release-assets/
+
+      - name: Get version from tag
+        id: version
+        run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+
+      - name: Check if pre-release
+        id: prerelease
+        run: |
+          if [[ "${{ steps.version.outputs.VERSION }}" =~ (alpha|beta|rc) ]]; then
+            echo "IS_PRERELEASE=true" >> $GITHUB_OUTPUT
+          else
+            echo "IS_PRERELEASE=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Generate release notes
+        id: notes
+        run: |
+          echo "Generating release notes for ${{ steps.version.outputs.VERSION }}"
+          
+          # Get the previous tag
+          PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
+          
+          if [ -z "$PREV_TAG" ]; then
+            echo "NOTES<<EOF" >> $GITHUB_OUTPUT
+            echo "## What's New" >> $GITHUB_OUTPUT
+            echo "" >> $GITHUB_OUTPUT
+            echo "Initial release of wordle-warlord!" >> $GITHUB_OUTPUT
+            echo "" >> $GITHUB_OUTPUT
+            echo "## Installation" >> $GITHUB_OUTPUT
+            echo "" >> $GITHUB_OUTPUT
+            echo "Download the appropriate archive for your platform below, extract it, and run the binary." >> $GITHUB_OUTPUT
+            echo "" >> $GITHUB_OUTPUT
+            echo "## Checksums" >> $GITHUB_OUTPUT
+            echo "" >> $GITHUB_OUTPUT
+            echo "SHA256 checksums are provided for each archive to verify integrity." >> $GITHUB_OUTPUT
+            echo "EOF" >> $GITHUB_OUTPUT
+          else
+            echo "NOTES<<EOF" >> $GITHUB_OUTPUT
+            echo "## What's Changed" >> $GITHUB_OUTPUT
+            echo "" >> $GITHUB_OUTPUT
+            git log --pretty=format:"- %s" ${PREV_TAG}..HEAD | grep -v "Merge pull request" >> $GITHUB_OUTPUT || echo "- Bug fixes and improvements" >> $GITHUB_OUTPUT
+            echo "" >> $GITHUB_OUTPUT
+            echo "" >> $GITHUB_OUTPUT
+            echo "## Installation" >> $GITHUB_OUTPUT
+            echo "" >> $GITHUB_OUTPUT
+            echo "Download the appropriate archive for your platform below, extract it, and run the binary." >> $GITHUB_OUTPUT
+            echo "" >> $GITHUB_OUTPUT
+            echo "## Checksums" >> $GITHUB_OUTPUT
+            echo "" >> $GITHUB_OUTPUT
+            echo "SHA256 checksums are provided for each archive to verify integrity." >> $GITHUB_OUTPUT
+            echo "EOF" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          name: Release ${{ steps.version.outputs.VERSION }}
+          body: ${{ steps.notes.outputs.NOTES }}
+          prerelease: ${{ steps.prerelease.outputs.IS_PRERELEASE }}
+          files: release-assets/*
+          draft: false
+          generate_release_notes: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

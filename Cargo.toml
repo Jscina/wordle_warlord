@@ -3,6 +3,10 @@ name = "wordle_warlord"
 version = "0.1.0"
 edition = "2024"
 
+[[bin]]
+name = "wordle-warlord"
+path = "src/main.rs"
+
 [lib]
 name = "wordle_warlord"
 path = "src/lib.rs"

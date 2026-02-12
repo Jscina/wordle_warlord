@@ -1,5 +1,9 @@
 # wordle-warlord 🟩🟨⬛
 
+[![CI](https://github.com/Jscina/wordle_grep/actions/workflows/ci.yml/badge.svg)](https://github.com/Jscina/wordle_grep/actions/workflows/ci.yml)
+[![Release](https://github.com/Jscina/wordle_grep/actions/workflows/release.yml/badge.svg)](https://github.com/Jscina/wordle_grep/actions/workflows/release.yml)
+[![Security Audit](https://github.com/Jscina/wordle_grep/actions/workflows/audit.yml/badge.svg)](https://github.com/Jscina/wordle_grep/actions/workflows/audit.yml)
+
 A Wordle solver **and** local Wordle game written in Rust, with an interactive terminal UI and game history tracking.
 
 `wordle-warlord` models actual Wordle rules including repeated letters, per-guess min/max constraints, and multi-guess compounding. It features three modes:
@@ -159,6 +163,47 @@ If results are empty, the constraints are wrong — not the code.
 
 ## Installation
 
+### Pre-built Binaries (Recommended)
+
+Download the latest release for your platform from the [releases page](https://github.com/Jscina/wordle_grep/releases):
+
+**Linux:**
+```bash
+# x86_64
+curl -LO https://github.com/Jscina/wordle_grep/releases/latest/download/wordle-warlord-v*-x86_64-unknown-linux-gnu.tar.gz
+tar xzf wordle-warlord-v*-x86_64-unknown-linux-gnu.tar.gz
+./wordle-warlord
+
+# aarch64 (ARM)
+curl -LO https://github.com/Jscina/wordle_grep/releases/latest/download/wordle-warlord-v*-aarch64-unknown-linux-gnu.tar.gz
+tar xzf wordle-warlord-v*-aarch64-unknown-linux-gnu.tar.gz
+./wordle-warlord
+```
+
+**macOS:**
+```bash
+# Apple Silicon (M1/M2/M3)
+curl -LO https://github.com/Jscina/wordle_grep/releases/latest/download/wordle-warlord-v*-aarch64-apple-darwin.zip
+unzip wordle-warlord-v*-aarch64-apple-darwin.zip
+./wordle-warlord
+
+# Intel
+curl -LO https://github.com/Jscina/wordle_grep/releases/latest/download/wordle-warlord-v*-x86_64-apple-darwin.zip
+unzip wordle-warlord-v*-x86_64-apple-darwin.zip
+./wordle-warlord
+```
+
+**Windows:**
+```powershell
+# Download from releases page and extract
+# Or use PowerShell:
+Invoke-WebRequest -Uri "https://github.com/Jscina/wordle_grep/releases/latest/download/wordle-warlord-v*-x86_64-pc-windows-msvc.zip" -OutFile wordle-warlord.zip
+Expand-Archive wordle-warlord.zip -DestinationPath .
+.\wordle-warlord.exe
+```
+
+### Build from Source
+
 Clone and build normally:
 
 ```bash
@@ -167,7 +212,9 @@ cd wordle-warlord
 cargo build --release
 ```
 
-Or just run it:
+The binary will be at `target/release/wordle-warlord`.
+
+Or just run it directly:
 
 ```bash
 cargo run
@@ -355,6 +402,31 @@ Because:
 - Correct solvers are fun to build
 - Someone was way too confident about a solve in two
 - And stats tracking is oddly satisfying
+
+---
+
+## Contributing
+
+Contributions are welcome! Please ensure:
+
+- Tests pass: `cargo test`
+- Code is formatted: `cargo fmt`
+- No clippy warnings: `cargo clippy -- -D warnings`
+
+All pull requests automatically run CI checks for testing, linting, and building.
+
+---
+
+## Releases
+
+Releases are automatically created when version tags are pushed:
+
+1. Update version in `Cargo.toml`
+2. Commit the change: `git commit -am "Release v0.2.0"`
+3. Create and push tag: `git tag v0.2.0 && git push origin main --tags`
+4. GitHub Actions will automatically build binaries for all platforms and create a release
+
+Pre-release versions (containing `alpha`, `beta`, or `rc`) are marked as pre-releases automatically.
 
 ---
 
