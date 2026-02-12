@@ -1,6 +1,6 @@
 use super::super::{
     app::App,
-    history::{HistoryData, HistoryViewMode, parse_game_history, parse_solver_history},
+    history::{HistoryData, HistoryViewMode},
     types::GameMode,
 };
 
@@ -43,20 +43,22 @@ impl<'a> HistoryHandler<'a> {
         }
     }
 
-    /// Load and parse game history from log files.
+    /// Load and parse game history from the database.
     pub fn load_history(&mut self) {
         self.app.log("Loading game history...");
 
-        match parse_game_history("logs") {
-            Ok(games) => {
-                let game_count = games.len();
+        // Use block_in_place to call async database operations
+        let result = tokio::task::block_in_place(|| {
+            tokio::runtime::Handle::current().block_on(async {
+                let games = crate::db::history::load_game_records(&self.app.db_pool).await?;
+                let sessions = crate::db::history::load_solver_sessions(&self.app.db_pool).await?;
+                Ok::<_, anyhow::Error>((games, sessions))
+            })
+        });
 
-                // Also load solver sessions
-                let sessions = parse_solver_history("logs").unwrap_or_else(|e| {
-                    self.app
-                        .log(format!("Warning: Failed to load solver history: {}", e));
-                    Vec::new()
-                });
+        match result {
+            Ok((games, sessions)) => {
+                let game_count = games.len();
                 let session_count = sessions.len();
 
                 self.app.history_data = Some(HistoryData::new(games, sessions));

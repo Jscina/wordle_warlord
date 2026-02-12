@@ -3,6 +3,7 @@ use crate::{
         compute_constraint_summary, compute_letter_analysis, compute_position_analysis,
         compute_solution_pool_stats,
     },
+    db,
     scoring::score_and_sort,
     solver::SolverState,
 };
@@ -66,6 +67,14 @@ impl<'a> SolverHandler<'a> {
                 // Log undo in solver session
                 let last_guess = self.app.solver.guesses().last().unwrap();
                 tracing::info!("Solver undo: removed guess {}", last_guess.word);
+
+                // Remove last guess from database
+                if let Some(session_id) = self.app.current_session_id {
+                    let _ = self.app.run_db_operation(db::solver::remove_last_guess(
+                        &self.app.db_pool,
+                        session_id,
+                    ));
+                }
             }
             self.app.solver.pop_guess();
             self.recompute();

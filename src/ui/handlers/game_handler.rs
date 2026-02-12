@@ -1,4 +1,5 @@
 use crate::{
+    db,
     solver::{Feedback, SolverState},
     wordlist::select_random_word,
 };
@@ -23,9 +24,22 @@ impl<'a> GameHandler<'a> {
             // End any active solver session
             if self.app.solver_session_active {
                 self.app.log("Solver session abandoned");
+
+                // Update solver session outcome in database
+                if let Some(session_id) = self.app.current_session_id {
+                    let _ = self
+                        .app
+                        .run_db_operation(db::solver::update_session_outcome(
+                            &self.app.db_pool,
+                            session_id,
+                            db::models::SolverOutcome::Abandoned,
+                        ));
+                }
+
                 self.app.solver_session_active = false;
                 self.app.solver_session_start = None;
-                self.app.solver_session_paused = false; // Reset pause state
+                self.app.solver_session_paused = false;
+                self.app.current_session_id = None;
             }
 
             self.start_new_game();
@@ -34,10 +48,19 @@ impl<'a> GameHandler<'a> {
             self.app.mode = GameMode::Solver;
 
             // Start a new solver session
+            let timestamp = Utc::now();
             self.app.solver_session_active = true;
-            self.app.solver_session_start = Some(Utc::now());
-            self.app.solver_session_paused = false; // Ensure not paused
+            self.app.solver_session_start = Some(timestamp);
+            self.app.solver_session_paused = false;
             self.app.log("Solver session started");
+
+            // Create solver session in database
+            if let Ok(session_id) = self
+                .app
+                .run_db_operation(db::solver::create_session(&self.app.db_pool, timestamp))
+            {
+                self.app.current_session_id = Some(session_id);
+            }
 
             SolverHandler::new(self.app).recompute();
             self.app.analysis_dirty = true;
@@ -47,7 +70,18 @@ impl<'a> GameHandler<'a> {
     pub fn start_new_game(&mut self) {
         match select_random_word(&self.app.solution_words, self.app.solver.word_len()) {
             Ok(target) => {
+                let timestamp = Utc::now();
                 tracing::info!("New game started with target word: {}", target);
+
+                // Create game in database
+                if let Ok(game_id) = self.app.run_db_operation(db::games::create_game(
+                    &self.app.db_pool,
+                    timestamp,
+                    target.clone(),
+                )) {
+                    self.app.current_game_id = Some(game_id);
+                }
+
                 self.app.mode = GameMode::Game;
                 self.app.target_word = Some(target);
                 self.app.remaining_guesses = 6;
@@ -77,6 +111,16 @@ impl<'a> GameHandler<'a> {
             self.app.log("Game won!");
             self.app.game_won = true;
             self.app.game_over = true;
+
+            // Update game outcome in database
+            if let Some(game_id) = self.app.current_game_id {
+                let _ = self.app.run_db_operation(db::games::update_game_outcome(
+                    &self.app.db_pool,
+                    game_id,
+                    db::models::GameOutcome::Won,
+                ));
+            }
+
             return;
         }
 
@@ -84,6 +128,15 @@ impl<'a> GameHandler<'a> {
         if self.app.remaining_guesses == 0 {
             self.app.log("Game over: out of guesses");
             self.app.game_over = true;
+
+            // Update game outcome in database
+            if let Some(game_id) = self.app.current_game_id {
+                let _ = self.app.run_db_operation(db::games::update_game_outcome(
+                    &self.app.db_pool,
+                    game_id,
+                    db::models::GameOutcome::Lost,
+                ));
+            }
         }
     }
 }

@@ -3,3 +3,5 @@
 words.txt
 solutions.txt
 
+/.sqlx
+/wordle-warlord.db

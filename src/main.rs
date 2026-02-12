@@ -1,5 +1,6 @@
 use anyhow::Result;
 use wordle_warlord::ui;
+use wordle_warlord::db;
 
 use once_cell::sync::OnceCell;
 use tracing_appender::rolling;
@@ -21,7 +22,12 @@ fn init_logging() {
         .init();
 }
 
-fn main() -> Result<()> {
+#[tokio::main]
+async fn main() -> Result<()> {
     init_logging();
-    ui::run_ui()
+    
+    // Initialize database
+    let db_pool = db::create_pool().await?;
+    
+    ui::run_ui(db_pool).await
 }

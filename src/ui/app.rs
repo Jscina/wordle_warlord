@@ -3,7 +3,8 @@ use std::{collections::HashSet, fmt::Display, io::Stdout};
 use anyhow::Result;
 use chrono::{DateTime, Utc};
 use crossterm::event::{self, Event};
-use ratatui::{Terminal, backend::CrosstermBackend};
+use ratatui::{backend::CrosstermBackend, Terminal};
+use sqlx::SqlitePool;
 use tracing::info;
 
 use crate::{
@@ -43,6 +44,9 @@ pub struct App {
     pub(in crate::ui) solver_session_active: bool,
     pub(in crate::ui) solver_session_start: Option<DateTime<Utc>>,
     pub(in crate::ui) solver_session_paused: bool,
+    pub(in crate::ui) db_pool: SqlitePool,
+    pub(in crate::ui) current_game_id: Option<i64>,
+    pub(in crate::ui) current_session_id: Option<i64>,
 }
 
 impl App {
@@ -51,6 +55,7 @@ impl App {
         solution_words: Vec<String>,
         word_len: usize,
         logs: LogBuffer,
+        db_pool: SqlitePool,
     ) -> Self {
         let allowed_lookup: HashSet<String> = words.iter().cloned().collect();
 
@@ -80,6 +85,9 @@ impl App {
             solver_session_active: true, // Start with session active since we're in Solver mode
             solver_session_start: Some(Utc::now()),
             solver_session_paused: false,
+            db_pool,
+            current_game_id: None,
+            current_session_id: None,
         }
     }
 
@@ -111,5 +119,13 @@ impl App {
     pub(in crate::ui) fn log(&self, msg: impl Into<String> + Display) {
         tracing::info!("{}", &msg);
         self.logs.push(msg.into());
+    }
+
+    /// Execute an async database operation from sync context
+    pub(in crate::ui) fn run_db_operation<F, T>(&self, future: F) -> Result<T>
+    where
+        F: std::future::Future<Output = Result<T>>,
+    {
+        tokio::task::block_in_place(|| tokio::runtime::Handle::current().block_on(future))
     }
 }

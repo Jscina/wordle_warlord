@@ -4,8 +4,9 @@ use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 use crate::{
     analysis::compute_solution_pool_stats,
+    db,
     scoring::{get_optimal_word, score_and_sort},
-    solver::{Guess, generate_feedback, parse_pattern},
+    solver::{generate_feedback, parse_pattern, Guess},
 };
 
 use super::super::{
@@ -272,9 +273,27 @@ impl<'a> InputHandler<'a> {
 
                 self.app
                     .solver
-                    .add_guess(Guess::new(word, feedback.clone()));
+                    .add_guess(Guess::new(word.clone(), feedback.clone()));
 
                 self.app.remaining_guesses -= 1;
+
+                // Save guess to database
+                if let Some(game_id) = self.app.current_game_id {
+                    let guess_number = (7 - self.app.remaining_guesses - 1) as i64;
+                    let db_feedback: Vec<db::models::Feedback> = feedback
+                        .iter()
+                        .map(|f| db::models::Feedback::from_solver(f))
+                        .collect();
+
+                    let _ = self.app.run_db_operation(db::games::add_guess(
+                        &self.app.db_pool,
+                        game_id,
+                        guess_number,
+                        word,
+                        db_feedback,
+                    ));
+                }
+
                 GameHandler::new(self.app).check_game_state(&feedback);
 
                 SolverHandler::new(self.app).recompute();
@@ -332,6 +351,23 @@ impl<'a> InputHandler<'a> {
                     optimal_word,
                     score_deviation
                 ));
+
+                // Save guess to database
+                if let Some(session_id) = self.app.current_session_id {
+                    let guess_number = self.app.solver.guesses().len() as i64;
+                    let _ = self.app.run_db_operation(db::solver::add_guess(
+                        &self.app.db_pool,
+                        session_id,
+                        guess_number,
+                        word.clone(),
+                        pool_size_before as i64,
+                        pool_size_after as i64,
+                        entropy,
+                        optimal_word.clone(),
+                        optimal_score as f64,
+                        score_deviation,
+                    ));
+                }
             } else {
                 self.app
                     .log(format!("Solver guess submitted: {} {:?}", &word, feedback));
@@ -351,6 +387,18 @@ impl<'a> InputHandler<'a> {
                 let guess_count = self.app.solver.guesses().len();
                 self.app
                     .log(format!("Solver session completed: {} guesses", guess_count));
+
+                // Update solver session outcome in database
+                if let Some(session_id) = self.app.current_session_id {
+                    let _ = self
+                        .app
+                        .run_db_operation(db::solver::update_session_outcome(
+                            &self.app.db_pool,
+                            session_id,
+                            db::models::SolverOutcome::Completed,
+                        ));
+                }
+
                 self.reset_solver_and_start_new_session();
             }
         }
@@ -367,9 +415,18 @@ impl<'a> InputHandler<'a> {
         self.app.analysis_dirty = true;
 
         // Start new session
+        let timestamp = chrono::Utc::now();
         self.app.solver_session_active = true;
         self.app.solver_session_paused = false;
-        self.app.solver_session_start = Some(chrono::Utc::now());
+        self.app.solver_session_start = Some(timestamp);
         self.app.log("Solver session started");
+
+        // Create new session in database
+        if let Ok(session_id) = self
+            .app
+            .run_db_operation(db::solver::create_session(&self.app.db_pool, timestamp))
+        {
+            self.app.current_session_id = Some(session_id);
+        }
     }
 }
