@@ -4,10 +4,48 @@ use sqlx::SqlitePool;
 
 use super::models::{SolverGuess, SolverOutcome, SolverSession};
 
+/// Parameters for adding a solver guess
+pub struct SolverGuessParams {
+    pub guess_number: i64,
+    pub word: String,
+    pub pool_size_before: i64,
+    pub pool_size_after: i64,
+    pub entropy: f64,
+    pub optimal_word: String,
+    pub optimal_entropy: f64,
+    pub deviation_score: f64,
+}
+
+impl SolverGuessParams {
+    /// Create a new SolverGuessParams instance
+    #[allow(clippy::too_many_arguments)]
+    pub fn new(
+        guess_number: i64,
+        word: String,
+        pool_size_before: i64,
+        pool_size_after: i64,
+        entropy: f64,
+        optimal_word: String,
+        optimal_entropy: f64,
+        deviation_score: f64,
+    ) -> Self {
+        Self {
+            guess_number,
+            word,
+            pool_size_before,
+            pool_size_after,
+            entropy,
+            optimal_word,
+            optimal_entropy,
+            deviation_score,
+        }
+    }
+}
+
 /// Create a new solver session in the database
 pub async fn create_session(pool: &SqlitePool, timestamp: DateTime<Utc>) -> Result<i64> {
     let timestamp_str = timestamp.to_rfc3339();
-    
+
     let result = sqlx::query!(
         r#"
         INSERT INTO solver_sessions (timestamp, outcome, guesses_count)
@@ -26,14 +64,7 @@ pub async fn create_session(pool: &SqlitePool, timestamp: DateTime<Utc>) -> Resu
 pub async fn add_guess(
     pool: &SqlitePool,
     session_id: i64,
-    guess_number: i64,
-    word: String,
-    pool_size_before: i64,
-    pool_size_after: i64,
-    entropy: f64,
-    optimal_word: String,
-    optimal_entropy: f64,
-    deviation_score: f64,
+    params: SolverGuessParams,
 ) -> Result<i64> {
     let mut tx = pool.begin().await?;
 
@@ -46,14 +77,14 @@ pub async fn add_guess(
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         "#,
         session_id,
-        guess_number,
-        word,
-        pool_size_before,
-        pool_size_after,
-        entropy,
-        optimal_word,
-        optimal_entropy,
-        deviation_score,
+        params.guess_number,
+        params.word,
+        params.pool_size_before,
+        params.pool_size_after,
+        params.entropy,
+        params.optimal_word,
+        params.optimal_entropy,
+        params.deviation_score,
     )
     .execute(&mut *tx)
     .await
@@ -66,7 +97,7 @@ pub async fn add_guess(
         SET guesses_count = ?
         WHERE id = ?
         "#,
-        guess_number,
+        params.guess_number,
         session_id,
     )
     .execute(&mut *tx)
@@ -179,7 +210,8 @@ pub async fn get_session_with_guesses(
     let session = SolverSession {
         id: session_row.id,
         timestamp,
-        outcome: SolverOutcome::from_string(&session_row.outcome).unwrap_or(SolverOutcome::Abandoned),
+        outcome: SolverOutcome::from_string(&session_row.outcome)
+            .unwrap_or(SolverOutcome::Abandoned),
         guesses_count: session_row.guesses_count,
     };
 
@@ -233,11 +265,12 @@ pub async fn get_all_sessions(pool: &SqlitePool) -> Result<Vec<SolverSession>> {
             let timestamp = DateTime::parse_from_rfc3339(&row.timestamp)
                 .map(|dt| dt.with_timezone(&Utc))
                 .unwrap_or_else(|_| Utc::now());
-            
+
             SolverSession {
                 id: row.id.unwrap_or(0),
                 timestamp,
-                outcome: SolverOutcome::from_string(&row.outcome).unwrap_or(SolverOutcome::Abandoned),
+                outcome: SolverOutcome::from_string(&row.outcome)
+                    .unwrap_or(SolverOutcome::Abandoned),
                 guesses_count: row.guesses_count,
             }
         })
@@ -247,7 +280,11 @@ pub async fn get_all_sessions(pool: &SqlitePool) -> Result<Vec<SolverSession>> {
 }
 
 /// Get paginated solver sessions
-pub async fn get_sessions_paginated(pool: &SqlitePool, limit: i64, offset: i64) -> Result<Vec<SolverSession>> {
+pub async fn get_sessions_paginated(
+    pool: &SqlitePool,
+    limit: i64,
+    offset: i64,
+) -> Result<Vec<SolverSession>> {
     let rows = sqlx::query!(
         r#"
         SELECT id, timestamp, outcome, guesses_count
@@ -267,11 +304,12 @@ pub async fn get_sessions_paginated(pool: &SqlitePool, limit: i64, offset: i64) 
             let timestamp = DateTime::parse_from_rfc3339(&row.timestamp)
                 .map(|dt| dt.with_timezone(&Utc))
                 .unwrap_or_else(|_| Utc::now());
-            
+
             SolverSession {
                 id: row.id.unwrap_or(0),
                 timestamp,
-                outcome: SolverOutcome::from_string(&row.outcome).unwrap_or(SolverOutcome::Abandoned),
+                outcome: SolverOutcome::from_string(&row.outcome)
+                    .unwrap_or(SolverOutcome::Abandoned),
                 guesses_count: row.guesses_count,
             }
         })
@@ -321,7 +359,10 @@ pub async fn get_solver_stats(pool: &SqlitePool) -> Result<SolverStats> {
     .fetch_one(pool)
     .await?;
 
-    let average_guesses = avg_guesses_result.avg_guesses.map(|v| v as f64).unwrap_or(0.0);
+    let average_guesses = avg_guesses_result
+        .avg_guesses
+        .map(|v| v as f64)
+        .unwrap_or(0.0);
 
     // Get average entropy across all guesses
     let avg_entropy_result = sqlx::query!(

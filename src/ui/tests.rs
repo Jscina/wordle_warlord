@@ -5,9 +5,27 @@ use super::{
     types::{GameMode, InputStatus, LogBuffer},
 };
 use crate::solver::{Feedback, Guess};
+use sqlx::{Pool, Sqlite, sqlite::SqlitePoolOptions};
+
+/// Helper function to create a test database pool (in-memory SQLite).
+async fn create_test_db_pool() -> Pool<Sqlite> {
+    let pool = SqlitePoolOptions::new()
+        .max_connections(1)
+        .connect("sqlite::memory:")
+        .await
+        .expect("Failed to create test database pool");
+
+    // Run migrations
+    sqlx::migrate!("./migrations")
+        .run(&pool)
+        .await
+        .expect("Failed to run migrations on test database");
+
+    pool
+}
 
 /// Helper function to create a test app with a minimal word list.
-fn create_test_app() -> App {
+async fn create_test_app() -> App {
     let words = vec![
         "raise".to_string(),
         "stone".to_string(),
@@ -20,17 +38,18 @@ fn create_test_app() -> App {
     ];
     let solution_words = words.clone();
     let logs = LogBuffer::new();
+    let db_pool = create_test_db_pool().await;
 
-    App::new(words, solution_words, 5, logs)
+    App::new(words, solution_words, 5, logs, db_pool)
 }
 
 #[cfg(test)]
 mod app_tests {
     use super::*;
 
-    #[test]
-    fn test_app_initialization() {
-        let app = create_test_app();
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_app_initialization() {
+        let app = create_test_app().await;
 
         assert_eq!(app.mode, GameMode::Solver);
         assert!(app.input.is_empty());
@@ -42,8 +61,8 @@ mod app_tests {
         assert!(app.target_word.is_none());
     }
 
-    #[test]
-    fn test_log_buffer() {
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_log_buffer() {
         let logs = LogBuffer::new();
 
         logs.push("Test message 1".to_string());
@@ -55,8 +74,8 @@ mod app_tests {
         assert_eq!(lines[1], "Test message 2");
     }
 
-    #[test]
-    fn test_log_buffer_max_capacity() {
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_log_buffer_max_capacity() {
         let logs = LogBuffer::new();
 
         // Push more than MAX_LOG_LINES
@@ -73,9 +92,9 @@ mod app_tests {
 mod input_handler_tests {
     use super::*;
 
-    #[test]
-    fn test_input_validation_solver_mode_incomplete() {
-        let mut app = create_test_app();
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_input_validation_solver_mode_incomplete() {
+        let mut app = create_test_app().await;
         app.mode = GameMode::Solver;
         app.input = "raise".to_string();
 
@@ -85,9 +104,9 @@ mod input_handler_tests {
         assert!(matches!(status, InputStatus::Incomplete));
     }
 
-    #[test]
-    fn test_input_validation_solver_mode_valid() {
-        let mut app = create_test_app();
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_input_validation_solver_mode_valid() {
+        let mut app = create_test_app().await;
         app.mode = GameMode::Solver;
         app.input = "raise GYXXX".to_string();
 
@@ -97,9 +116,9 @@ mod input_handler_tests {
         assert!(matches!(status, InputStatus::Valid));
     }
 
-    #[test]
-    fn test_input_validation_solver_mode_invalid_pattern() {
-        let mut app = create_test_app();
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_input_validation_solver_mode_invalid_pattern() {
+        let mut app = create_test_app().await;
         app.mode = GameMode::Solver;
         app.input = "raise GZXXX".to_string(); // Z is invalid
 
@@ -109,9 +128,9 @@ mod input_handler_tests {
         assert!(matches!(status, InputStatus::Invalid(_)));
     }
 
-    #[test]
-    fn test_input_validation_solver_mode_wrong_length() {
-        let mut app = create_test_app();
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_input_validation_solver_mode_wrong_length() {
+        let mut app = create_test_app().await;
         app.mode = GameMode::Solver;
         app.input = "raise GYX".to_string(); // Pattern too short
 
@@ -121,9 +140,9 @@ mod input_handler_tests {
         assert!(matches!(status, InputStatus::Invalid(_)));
     }
 
-    #[test]
-    fn test_input_validation_solver_mode_invalid_word() {
-        let mut app = create_test_app();
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_input_validation_solver_mode_invalid_word() {
+        let mut app = create_test_app().await;
         app.mode = GameMode::Solver;
         app.input = "zzzzz GGGGG".to_string(); // Word not in list
 
@@ -133,9 +152,9 @@ mod input_handler_tests {
         assert!(matches!(status, InputStatus::Invalid(_)));
     }
 
-    #[test]
-    fn test_input_validation_game_mode_valid() {
-        let mut app = create_test_app();
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_input_validation_game_mode_valid() {
+        let mut app = create_test_app().await;
         app.mode = GameMode::Game;
         app.target_word = Some("stone".to_string());
         app.input = "raise".to_string();
@@ -146,9 +165,9 @@ mod input_handler_tests {
         assert!(matches!(status, InputStatus::Valid));
     }
 
-    #[test]
-    fn test_input_validation_game_mode_incomplete() {
-        let mut app = create_test_app();
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_input_validation_game_mode_incomplete() {
+        let mut app = create_test_app().await;
         app.mode = GameMode::Game;
         app.target_word = Some("stone".to_string());
         app.input = "rai".to_string();
@@ -160,9 +179,9 @@ mod input_handler_tests {
         assert!(matches!(status, InputStatus::Invalid(_)));
     }
 
-    #[test]
-    fn test_input_validation_game_mode_invalid_word() {
-        let mut app = create_test_app();
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_input_validation_game_mode_invalid_word() {
+        let mut app = create_test_app().await;
         app.mode = GameMode::Game;
         app.target_word = Some("stone".to_string());
         app.input = "zzzzz".to_string();
@@ -173,9 +192,9 @@ mod input_handler_tests {
         assert!(matches!(status, InputStatus::Invalid(_)));
     }
 
-    #[test]
-    fn test_input_validation_game_mode_empty() {
-        let mut app = create_test_app();
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_input_validation_game_mode_empty() {
+        let mut app = create_test_app().await;
         app.mode = GameMode::Game;
         app.target_word = Some("stone".to_string());
         app.input = "".to_string();
@@ -191,9 +210,9 @@ mod input_handler_tests {
 mod game_handler_tests {
     use super::*;
 
-    #[test]
-    fn test_start_new_game() {
-        let mut app = create_test_app();
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_start_new_game() {
+        let mut app = create_test_app().await;
 
         GameHandler::new(&mut app).start_new_game();
 
@@ -208,9 +227,9 @@ mod game_handler_tests {
         assert_eq!(app.solver.guesses().len(), 0);
     }
 
-    #[test]
-    fn test_toggle_game_mode_from_solver() {
-        let mut app = create_test_app();
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_toggle_game_mode_from_solver() {
+        let mut app = create_test_app().await;
         app.mode = GameMode::Solver;
 
         GameHandler::new(&mut app).toggle_game_mode();
@@ -219,9 +238,9 @@ mod game_handler_tests {
         assert!(app.target_word.is_some());
     }
 
-    #[test]
-    fn test_toggle_game_mode_from_game() {
-        let mut app = create_test_app();
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_toggle_game_mode_from_game() {
+        let mut app = create_test_app().await;
         GameHandler::new(&mut app).start_new_game();
 
         GameHandler::new(&mut app).toggle_game_mode();
@@ -229,9 +248,9 @@ mod game_handler_tests {
         assert_eq!(app.mode, GameMode::Solver);
     }
 
-    #[test]
-    fn test_check_game_state_won() {
-        let mut app = create_test_app();
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_check_game_state_won() {
+        let mut app = create_test_app().await;
         app.mode = GameMode::Game;
         app.target_word = Some("stone".to_string());
 
@@ -249,9 +268,9 @@ mod game_handler_tests {
         assert!(app.game_over);
     }
 
-    #[test]
-    fn test_check_game_state_not_won() {
-        let mut app = create_test_app();
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_check_game_state_not_won() {
+        let mut app = create_test_app().await;
         app.mode = GameMode::Game;
         app.target_word = Some("stone".to_string());
         app.remaining_guesses = 3;
@@ -270,9 +289,9 @@ mod game_handler_tests {
         assert!(!app.game_over);
     }
 
-    #[test]
-    fn test_check_game_state_out_of_guesses() {
-        let mut app = create_test_app();
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_check_game_state_out_of_guesses() {
+        let mut app = create_test_app().await;
         app.mode = GameMode::Game;
         app.target_word = Some("stone".to_string());
         app.remaining_guesses = 0;
@@ -291,9 +310,9 @@ mod game_handler_tests {
         assert!(app.game_over);
     }
 
-    #[test]
-    fn test_game_state_resets_on_new_game() {
-        let mut app = create_test_app();
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_game_state_resets_on_new_game() {
+        let mut app = create_test_app().await;
 
         // Start first game
         GameHandler::new(&mut app).start_new_game();
@@ -315,9 +334,9 @@ mod game_handler_tests {
 mod solver_handler_tests {
     use super::*;
 
-    #[test]
-    fn test_undo_guess() {
-        let mut app = create_test_app();
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_undo_guess() {
+        let mut app = create_test_app().await;
 
         // Add a guess
         let guess = Guess::new(
@@ -340,9 +359,9 @@ mod solver_handler_tests {
         assert_eq!(app.solver.guesses().len(), 0);
     }
 
-    #[test]
-    fn test_undo_guess_empty() {
-        let mut app = create_test_app();
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_undo_guess_empty() {
+        let mut app = create_test_app().await;
 
         assert_eq!(app.solver.guesses().len(), 0);
 
@@ -352,9 +371,9 @@ mod solver_handler_tests {
         assert_eq!(app.solver.guesses().len(), 0);
     }
 
-    #[test]
-    fn test_recompute_updates_suggestions() {
-        let mut app = create_test_app();
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_recompute_updates_suggestions() {
+        let mut app = create_test_app().await;
 
         // Add a guess first - recompute only generates suggestions when guesses exist
         let guess = Guess::new(
@@ -378,9 +397,9 @@ mod solver_handler_tests {
         assert!(!app.suggestions.is_empty());
     }
 
-    #[test]
-    fn test_recompute_with_guess_narrows_suggestions() {
-        let mut app = create_test_app();
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_recompute_with_guess_narrows_suggestions() {
+        let mut app = create_test_app().await;
 
         // Get initial suggestion count
         SolverHandler::new(&mut app).recompute();
@@ -432,9 +451,9 @@ mod history_handler_tests {
         HistoryData::new(games, Vec::new())
     }
 
-    #[test]
-    fn test_enter_history_mode() {
-        let mut app = create_test_app();
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_enter_history_mode() {
+        let mut app = create_test_app().await;
         app.mode = GameMode::Solver;
 
         HistoryHandler::new(&mut app).enter_history_mode();
@@ -444,9 +463,9 @@ mod history_handler_tests {
         assert_eq!(app.history_page, 0);
     }
 
-    #[test]
-    fn test_exit_history_mode() {
-        let mut app = create_test_app();
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_exit_history_mode() {
+        let mut app = create_test_app().await;
         app.mode = GameMode::History;
 
         HistoryHandler::new(&mut app).exit_history_mode();
@@ -454,9 +473,9 @@ mod history_handler_tests {
         assert_eq!(app.mode, GameMode::Solver);
     }
 
-    #[test]
-    fn test_cycle_view_mode_stats_to_list() {
-        let mut app = create_test_app();
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_cycle_view_mode_stats_to_list() {
+        let mut app = create_test_app().await;
         app.history_view_mode = HistoryViewMode::Stats;
         app.history_data = Some(create_test_history_data());
 
@@ -465,9 +484,9 @@ mod history_handler_tests {
         assert_eq!(app.history_view_mode, HistoryViewMode::List);
     }
 
-    #[test]
-    fn test_cycle_view_mode_list_to_stats_no_selection() {
-        let mut app = create_test_app();
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_cycle_view_mode_list_to_stats_no_selection() {
+        let mut app = create_test_app().await;
         app.history_view_mode = HistoryViewMode::List;
         app.history_data = Some(create_test_history_data());
 
@@ -477,9 +496,9 @@ mod history_handler_tests {
         assert_eq!(app.history_view_mode, HistoryViewMode::Solver);
     }
 
-    #[test]
-    fn test_cycle_view_mode_list_to_detail_with_selection() {
-        let mut app = create_test_app();
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_cycle_view_mode_list_to_detail_with_selection() {
+        let mut app = create_test_app().await;
         app.history_view_mode = HistoryViewMode::List;
         let mut data = create_test_history_data();
         data.select_game(0);
@@ -490,9 +509,9 @@ mod history_handler_tests {
         assert_eq!(app.history_view_mode, HistoryViewMode::Detail);
     }
 
-    #[test]
-    fn test_cycle_view_mode_detail_to_stats() {
-        let mut app = create_test_app();
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_cycle_view_mode_detail_to_stats() {
+        let mut app = create_test_app().await;
         app.history_view_mode = HistoryViewMode::Detail;
         app.history_data = Some(create_test_history_data());
 
@@ -501,9 +520,9 @@ mod history_handler_tests {
         assert_eq!(app.history_view_mode, HistoryViewMode::Stats);
     }
 
-    #[test]
-    fn test_select_game_on_page() {
-        let mut app = create_test_app();
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_select_game_on_page() {
+        let mut app = create_test_app().await;
         app.history_data = Some(create_test_history_data());
         app.history_page = 0;
 
@@ -513,9 +532,9 @@ mod history_handler_tests {
         assert!(app.history_data.as_ref().unwrap().selected_game().is_some());
     }
 
-    #[test]
-    fn test_select_game_invalid_index() {
-        let mut app = create_test_app();
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_select_game_invalid_index() {
+        let mut app = create_test_app().await;
         app.history_data = Some(create_test_history_data());
         app.history_page = 0;
 
@@ -526,9 +545,9 @@ mod history_handler_tests {
         assert!(app.history_data.as_ref().unwrap().selected_game().is_none());
     }
 
-    #[test]
-    fn test_pagination() {
-        let mut app = create_test_app();
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_pagination() {
+        let mut app = create_test_app().await;
         app.history_data = Some(create_test_history_data());
         app.history_page = 0;
 
@@ -543,9 +562,9 @@ mod history_handler_tests {
         assert_eq!(app.history_page, 0);
     }
 
-    #[test]
-    fn test_return_to_list() {
-        let mut app = create_test_app();
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_return_to_list() {
+        let mut app = create_test_app().await;
         let mut data = create_test_history_data();
         data.select_game(0);
         app.history_data = Some(data);
@@ -557,9 +576,9 @@ mod history_handler_tests {
         assert!(app.history_data.as_ref().unwrap().selected_game().is_none());
     }
 
-    #[test]
-    fn test_return_to_stats() {
-        let mut app = create_test_app();
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_return_to_stats() {
+        let mut app = create_test_app().await;
         let mut data = create_test_history_data();
         data.select_game(0);
         app.history_data = Some(data);
@@ -576,9 +595,9 @@ mod history_handler_tests {
 mod mode_switching_tests {
     use super::*;
 
-    #[test]
-    fn test_solver_to_game_transition() {
-        let mut app = create_test_app();
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_solver_to_game_transition() {
+        let mut app = create_test_app().await;
         app.mode = GameMode::Solver;
         app.show_analysis = true;
 
@@ -589,9 +608,9 @@ mod mode_switching_tests {
         assert!(!app.show_suggestions); // Should be hidden in game mode
     }
 
-    #[test]
-    fn test_game_to_solver_transition() {
-        let mut app = create_test_app();
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_game_to_solver_transition() {
+        let mut app = create_test_app().await;
         GameHandler::new(&mut app).start_new_game();
         app.show_analysis = false;
 
@@ -601,9 +620,9 @@ mod mode_switching_tests {
         // Analysis visibility should remain as set (solver mode respects toggle)
     }
 
-    #[test]
-    fn test_solver_to_history_transition() {
-        let mut app = create_test_app();
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_solver_to_history_transition() {
+        let mut app = create_test_app().await;
         app.mode = GameMode::Solver;
 
         HistoryHandler::new(&mut app).enter_history_mode();
@@ -612,9 +631,9 @@ mod mode_switching_tests {
         assert_eq!(app.history_view_mode, HistoryViewMode::Stats);
     }
 
-    #[test]
-    fn test_history_to_solver_transition() {
-        let mut app = create_test_app();
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_history_to_solver_transition() {
+        let mut app = create_test_app().await;
         app.mode = GameMode::History;
 
         HistoryHandler::new(&mut app).exit_history_mode();
@@ -622,9 +641,9 @@ mod mode_switching_tests {
         assert_eq!(app.mode, GameMode::Solver);
     }
 
-    #[test]
-    fn test_game_state_persists_when_switching_modes() {
-        let mut app = create_test_app();
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_game_state_persists_when_switching_modes() {
+        let mut app = create_test_app().await;
 
         // Add a guess in solver mode
         let guess = Guess::new(
@@ -653,17 +672,17 @@ mod mode_switching_tests {
 mod analysis_toggle_tests {
     use super::*;
 
-    #[test]
-    fn test_analysis_shown_by_default_in_solver() {
-        let app = create_test_app();
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_analysis_shown_by_default_in_solver() {
+        let app = create_test_app().await;
 
         assert_eq!(app.mode, GameMode::Solver);
         assert!(app.show_analysis);
     }
 
-    #[test]
-    fn test_analysis_hidden_by_default_in_game() {
-        let mut app = create_test_app();
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_analysis_hidden_by_default_in_game() {
+        let mut app = create_test_app().await;
 
         GameHandler::new(&mut app).start_new_game();
 
@@ -671,9 +690,9 @@ mod analysis_toggle_tests {
         assert!(!app.show_analysis);
     }
 
-    #[test]
-    fn test_analysis_toggle_in_game_mode() {
-        let mut app = create_test_app();
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_analysis_toggle_in_game_mode() {
+        let mut app = create_test_app().await;
         GameHandler::new(&mut app).start_new_game();
 
         assert!(!app.show_analysis);
@@ -687,9 +706,9 @@ mod analysis_toggle_tests {
         assert!(!app.show_analysis);
     }
 
-    #[test]
-    fn test_suggestions_toggle_in_game_mode() {
-        let mut app = create_test_app();
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_suggestions_toggle_in_game_mode() {
+        let mut app = create_test_app().await;
         GameHandler::new(&mut app).start_new_game();
 
         assert!(!app.show_suggestions);

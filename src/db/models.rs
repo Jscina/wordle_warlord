@@ -9,15 +9,18 @@ pub enum GameOutcome {
     Abandoned,
 }
 
-impl GameOutcome {
-    pub fn to_string(&self) -> String {
-        match self {
-            GameOutcome::Won => "won".to_string(),
-            GameOutcome::Lost => "lost".to_string(),
-            GameOutcome::Abandoned => "abandoned".to_string(),
-        }
+impl std::fmt::Display for GameOutcome {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let s = match self {
+            GameOutcome::Won => "won",
+            GameOutcome::Lost => "lost",
+            GameOutcome::Abandoned => "abandoned",
+        };
+        write!(f, "{}", s)
     }
+}
 
+impl GameOutcome {
     pub fn from_string(s: &str) -> Option<Self> {
         match s {
             "won" => Some(GameOutcome::Won),
@@ -34,14 +37,17 @@ pub enum SolverOutcome {
     Abandoned,
 }
 
-impl SolverOutcome {
-    pub fn to_string(&self) -> String {
-        match self {
-            SolverOutcome::Completed => "completed".to_string(),
-            SolverOutcome::Abandoned => "abandoned".to_string(),
-        }
+impl std::fmt::Display for SolverOutcome {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let s = match self {
+            SolverOutcome::Completed => "completed",
+            SolverOutcome::Abandoned => "abandoned",
+        };
+        write!(f, "{}", s)
     }
+}
 
+impl SolverOutcome {
     pub fn from_string(s: &str) -> Option<Self> {
         match s {
             "completed" => Some(SolverOutcome::Completed),

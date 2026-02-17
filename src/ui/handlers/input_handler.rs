@@ -4,7 +4,7 @@ use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 use crate::{
     analysis::compute_solution_pool_stats,
-    db,
+    db::{self, solver::SolverGuessParams},
     scoring::{get_optimal_word, score_and_sort},
     solver::{generate_feedback, parse_pattern, Guess},
 };
@@ -282,7 +282,7 @@ impl<'a> InputHandler<'a> {
                     let guess_number = (7 - self.app.remaining_guesses - 1) as i64;
                     let db_feedback: Vec<db::models::Feedback> = feedback
                         .iter()
-                        .map(|f| db::models::Feedback::from_solver(f))
+                        .map(db::models::Feedback::from_solver)
                         .collect();
 
                     let _ = self.app.run_db_operation(db::games::add_guess(
@@ -355,9 +355,7 @@ impl<'a> InputHandler<'a> {
                 // Save guess to database
                 if let Some(session_id) = self.app.current_session_id {
                     let guess_number = self.app.solver.guesses().len() as i64;
-                    let _ = self.app.run_db_operation(db::solver::add_guess(
-                        &self.app.db_pool,
-                        session_id,
+                    let params = SolverGuessParams::new(
                         guess_number,
                         word.clone(),
                         pool_size_before as i64,
@@ -366,6 +364,11 @@ impl<'a> InputHandler<'a> {
                         optimal_word.clone(),
                         optimal_score as f64,
                         score_deviation,
+                    );
+                    let _ = self.app.run_db_operation(db::solver::add_guess(
+                        &self.app.db_pool,
+                        session_id,
+                        params,
                     ));
                 }
             } else {
