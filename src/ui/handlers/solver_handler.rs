@@ -95,3 +95,138 @@ impl<'a> SolverHandler<'a> {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::super::super::{app::App, types::LogBuffer};
+    use crate::solver::{Feedback, Guess};
+    use sqlx::sqlite::SqlitePoolOptions;
+
+    /// Helper function to create a test database pool (in-memory SQLite).
+    async fn create_test_db_pool() -> sqlx::Pool<sqlx::Sqlite> {
+        let pool = SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect("sqlite::memory:")
+            .await
+            .expect("Failed to create test database pool");
+
+        // Run migrations
+        sqlx::migrate!("./migrations")
+            .run(&pool)
+            .await
+            .expect("Failed to run migrations on test database");
+
+        pool
+    }
+
+    /// Helper function to create a test app with a minimal word list.
+    async fn create_test_app() -> App {
+        let words = vec![
+            "raise".to_string(),
+            "stone".to_string(),
+            "slate".to_string(),
+            "crane".to_string(),
+            "house".to_string(),
+            "apple".to_string(),
+            "world".to_string(),
+            "magic".to_string(),
+        ];
+        let solution_words = words.clone();
+        let logs = LogBuffer::new();
+        let db_pool = create_test_db_pool().await;
+
+        App::new(words, solution_words, 5, logs, db_pool)
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_undo_guess() {
+        let mut app = create_test_app().await;
+
+        // Add a guess
+        let guess = Guess::new(
+            "raise".to_string(),
+            vec![
+                Feedback::Gray,
+                Feedback::Yellow,
+                Feedback::Gray,
+                Feedback::Gray,
+                Feedback::Green,
+            ],
+        );
+        app.solver.add_guess(guess);
+
+        assert_eq!(app.solver.guesses().len(), 1);
+
+        // Undo the guess
+        super::SolverHandler::new(&mut app).undo_guess();
+
+        assert_eq!(app.solver.guesses().len(), 0);
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_undo_guess_empty() {
+        let mut app = create_test_app().await;
+
+        assert_eq!(app.solver.guesses().len(), 0);
+
+        // Undo with no guesses should not crash
+        super::SolverHandler::new(&mut app).undo_guess();
+
+        assert_eq!(app.solver.guesses().len(), 0);
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_recompute_updates_suggestions() {
+        let mut app = create_test_app().await;
+
+        // Add a guess first - recompute only generates suggestions when guesses exist
+        let guess = Guess::new(
+            "raise".to_string(),
+            vec![
+                Feedback::Gray,
+                Feedback::Yellow,
+                Feedback::Gray,
+                Feedback::Gray,
+                Feedback::Green,
+            ],
+        );
+        app.solver.add_guess(guess);
+
+        // Initially no suggestions computed
+        app.suggestions.clear();
+
+        // Recompute should populate suggestions
+        super::SolverHandler::new(&mut app).recompute();
+
+        assert!(!app.suggestions.is_empty());
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_recompute_with_guess_narrows_suggestions() {
+        let mut app = create_test_app().await;
+
+        // Get initial suggestion count
+        super::SolverHandler::new(&mut app).recompute();
+        let initial_count = app.suggestions.len();
+
+        // Add a guess that filters words
+        let guess = Guess::new(
+            "raise".to_string(),
+            vec![
+                Feedback::Gray,
+                Feedback::Gray,
+                Feedback::Gray,
+                Feedback::Gray,
+                Feedback::Green,
+            ],
+        );
+        app.solver.add_guess(guess);
+
+        // Recompute with constraint
+        super::SolverHandler::new(&mut app).recompute();
+        let filtered_count = app.suggestions.len();
+
+        // Should have fewer suggestions after constraint
+        assert!(filtered_count <= initial_count);
+    }
+}

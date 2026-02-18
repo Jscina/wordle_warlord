@@ -433,3 +433,159 @@ impl<'a> InputHandler<'a> {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::super::super::types::{GameMode, InputStatus, LogBuffer};
+    use crate::ui::app::App;
+    use sqlx::sqlite::SqlitePoolOptions;
+
+    /// Helper function to create a test database pool (in-memory SQLite).
+    async fn create_test_db_pool() -> sqlx::Pool<sqlx::Sqlite> {
+        let pool = SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect("sqlite::memory:")
+            .await
+            .expect("Failed to create test database pool");
+
+        // Run migrations
+        sqlx::migrate!("./migrations")
+            .run(&pool)
+            .await
+            .expect("Failed to run migrations on test database");
+
+        pool
+    }
+
+    /// Helper function to create a test app with a minimal word list.
+    async fn create_test_app() -> App {
+        let words = vec![
+            "raise".to_string(),
+            "stone".to_string(),
+            "slate".to_string(),
+            "crane".to_string(),
+            "house".to_string(),
+            "apple".to_string(),
+            "world".to_string(),
+            "magic".to_string(),
+        ];
+        let solution_words = words.clone();
+        let logs = LogBuffer::new();
+        let db_pool = create_test_db_pool().await;
+
+        App::new(words, solution_words, 5, logs, db_pool)
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_input_validation_solver_mode_incomplete() {
+        let mut app = create_test_app().await;
+        app.mode = GameMode::Solver;
+        app.input = "raise".to_string();
+
+        let handler = super::InputHandler::new(&mut app);
+        let status = handler.input_status();
+
+        assert!(matches!(status, InputStatus::Incomplete));
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_input_validation_solver_mode_valid() {
+        let mut app = create_test_app().await;
+        app.mode = GameMode::Solver;
+        app.input = "raise GYXXX".to_string();
+
+        let handler = super::InputHandler::new(&mut app);
+        let status = handler.input_status();
+
+        assert!(matches!(status, InputStatus::Valid));
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_input_validation_solver_mode_invalid_pattern() {
+        let mut app = create_test_app().await;
+        app.mode = GameMode::Solver;
+        app.input = "raise GZXXX".to_string(); // Z is invalid
+
+        let handler = super::InputHandler::new(&mut app);
+        let status = handler.input_status();
+
+        assert!(matches!(status, InputStatus::Invalid(_)));
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_input_validation_solver_mode_wrong_length() {
+        let mut app = create_test_app().await;
+        app.mode = GameMode::Solver;
+        app.input = "raise GYX".to_string(); // Pattern too short
+
+        let handler = super::InputHandler::new(&mut app);
+        let status = handler.input_status();
+
+        assert!(matches!(status, InputStatus::Invalid(_)));
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_input_validation_solver_mode_invalid_word() {
+        let mut app = create_test_app().await;
+        app.mode = GameMode::Solver;
+        app.input = "zzzzz GGGGG".to_string(); // Word not in list
+
+        let handler = super::InputHandler::new(&mut app);
+        let status = handler.input_status();
+
+        assert!(matches!(status, InputStatus::Invalid(_)));
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_input_validation_game_mode_valid() {
+        let mut app = create_test_app().await;
+        app.mode = GameMode::Game;
+        app.target_word = Some("stone".to_string());
+        app.input = "raise".to_string();
+
+        let handler = super::InputHandler::new(&mut app);
+        let status = handler.input_status();
+
+        assert!(matches!(status, InputStatus::Valid));
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_input_validation_game_mode_incomplete() {
+        let mut app = create_test_app().await;
+        app.mode = GameMode::Game;
+        app.target_word = Some("stone".to_string());
+        app.input = "rai".to_string();
+
+        let handler = super::InputHandler::new(&mut app);
+        let status = handler.input_status();
+
+        // Word too short is invalid, not incomplete
+        assert!(matches!(status, InputStatus::Invalid(_)));
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_input_validation_game_mode_invalid_word() {
+        let mut app = create_test_app().await;
+        app.mode = GameMode::Game;
+        app.target_word = Some("stone".to_string());
+        app.input = "zzzzz".to_string();
+
+        let handler = super::InputHandler::new(&mut app);
+        let status = handler.input_status();
+
+        assert!(matches!(status, InputStatus::Invalid(_)));
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_input_validation_game_mode_empty() {
+        let mut app = create_test_app().await;
+        app.mode = GameMode::Game;
+        app.target_word = Some("stone".to_string());
+        app.input = "".to_string();
+
+        let handler = super::InputHandler::new(&mut app);
+        let status = handler.input_status();
+
+        assert!(matches!(status, InputStatus::Incomplete));
+    }
+}

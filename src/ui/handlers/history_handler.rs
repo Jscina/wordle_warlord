@@ -140,3 +140,207 @@ impl<'a> HistoryHandler<'a> {
         self.app.history_view_mode = HistoryViewMode::Stats;
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::super::super::{
+        app::App,
+        history::{GameOutcome, GameRecord, HistoryData, HistoryViewMode},
+        types::{GameMode, LogBuffer},
+    };
+    use chrono::Utc;
+    use sqlx::sqlite::SqlitePoolOptions;
+
+    /// Helper function to create a test database pool (in-memory SQLite).
+    async fn create_test_db_pool() -> sqlx::Pool<sqlx::Sqlite> {
+        let pool = SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect("sqlite::memory:")
+            .await
+            .expect("Failed to create test database pool");
+
+        // Run migrations
+        sqlx::migrate!("./migrations")
+            .run(&pool)
+            .await
+            .expect("Failed to run migrations on test database");
+
+        pool
+    }
+
+    /// Helper function to create a test app with a minimal word list.
+    async fn create_test_app() -> App {
+        let words = vec![
+            "raise".to_string(),
+            "stone".to_string(),
+            "slate".to_string(),
+            "crane".to_string(),
+            "house".to_string(),
+            "apple".to_string(),
+            "world".to_string(),
+            "magic".to_string(),
+        ];
+        let solution_words = words.clone();
+        let logs = LogBuffer::new();
+        let db_pool = create_test_db_pool().await;
+
+        App::new(words, solution_words, 5, logs, db_pool)
+    }
+
+    fn create_test_history_data() -> HistoryData {
+        let games = vec![
+            GameRecord {
+                timestamp: Utc::now(),
+                target_word: "stone".to_string(),
+                guesses: vec![],
+                outcome: GameOutcome::Won { guesses: 3 },
+            },
+            GameRecord {
+                timestamp: Utc::now(),
+                target_word: "raise".to_string(),
+                guesses: vec![],
+                outcome: GameOutcome::Lost,
+            },
+        ];
+        HistoryData::new(games, Vec::new())
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_enter_history_mode() {
+        let mut app = create_test_app().await;
+        app.mode = GameMode::Solver;
+
+        super::HistoryHandler::new(&mut app).enter_history_mode();
+
+        assert_eq!(app.mode, GameMode::History);
+        assert_eq!(app.history_view_mode, HistoryViewMode::Stats);
+        assert_eq!(app.history_page, 0);
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_exit_history_mode() {
+        let mut app = create_test_app().await;
+        app.mode = GameMode::History;
+
+        super::HistoryHandler::new(&mut app).exit_history_mode();
+
+        assert_eq!(app.mode, GameMode::Solver);
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_cycle_view_mode_stats_to_list() {
+        let mut app = create_test_app().await;
+        app.history_view_mode = HistoryViewMode::Stats;
+        app.history_data = Some(create_test_history_data());
+
+        super::HistoryHandler::new(&mut app).cycle_view_mode();
+
+        assert_eq!(app.history_view_mode, HistoryViewMode::List);
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_cycle_view_mode_list_to_stats_no_selection() {
+        let mut app = create_test_app().await;
+        app.history_view_mode = HistoryViewMode::List;
+        app.history_data = Some(create_test_history_data());
+
+        super::HistoryHandler::new(&mut app).cycle_view_mode();
+
+        // With the new Solver view, List cycles to Solver when no game is selected
+        assert_eq!(app.history_view_mode, HistoryViewMode::Solver);
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_cycle_view_mode_list_to_detail_with_selection() {
+        let mut app = create_test_app().await;
+        app.history_view_mode = HistoryViewMode::List;
+        let mut data = create_test_history_data();
+        data.select_game(0);
+        app.history_data = Some(data);
+
+        super::HistoryHandler::new(&mut app).cycle_view_mode();
+
+        assert_eq!(app.history_view_mode, HistoryViewMode::Detail);
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_cycle_view_mode_detail_to_stats() {
+        let mut app = create_test_app().await;
+        app.history_view_mode = HistoryViewMode::Detail;
+        app.history_data = Some(create_test_history_data());
+
+        super::HistoryHandler::new(&mut app).cycle_view_mode();
+
+        assert_eq!(app.history_view_mode, HistoryViewMode::Stats);
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_select_game_on_page() {
+        let mut app = create_test_app().await;
+        app.history_data = Some(create_test_history_data());
+        app.history_page = 0;
+
+        super::HistoryHandler::new(&mut app).select_game_on_page(0);
+
+        assert_eq!(app.history_view_mode, HistoryViewMode::Detail);
+        assert!(app.history_data.as_ref().unwrap().selected_game().is_some());
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_select_game_invalid_index() {
+        let mut app = create_test_app().await;
+        app.history_data = Some(create_test_history_data());
+        app.history_page = 0;
+
+        // Try to select index that doesn't exist
+        super::HistoryHandler::new(&mut app).select_game_on_page(99);
+
+        // Should not crash, and no game should be selected
+        assert!(app.history_data.as_ref().unwrap().selected_game().is_none());
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_pagination() {
+        let mut app = create_test_app().await;
+        app.history_data = Some(create_test_history_data());
+        app.history_page = 0;
+
+        // Go to next page
+        super::HistoryHandler::new(&mut app).next_page();
+
+        // With only 2 games, should stay on page 0
+        assert_eq!(app.history_page, 0);
+
+        // Go back
+        super::HistoryHandler::new(&mut app).prev_page();
+        assert_eq!(app.history_page, 0);
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_return_to_list() {
+        let mut app = create_test_app().await;
+        let mut data = create_test_history_data();
+        data.select_game(0);
+        app.history_data = Some(data);
+        app.history_view_mode = HistoryViewMode::Detail;
+
+        super::HistoryHandler::new(&mut app).return_to_list();
+
+        assert_eq!(app.history_view_mode, HistoryViewMode::List);
+        assert!(app.history_data.as_ref().unwrap().selected_game().is_none());
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_return_to_stats() {
+        let mut app = create_test_app().await;
+        let mut data = create_test_history_data();
+        data.select_game(0);
+        app.history_data = Some(data);
+        app.history_view_mode = HistoryViewMode::Detail;
+
+        super::HistoryHandler::new(&mut app).return_to_stats();
+
+        assert_eq!(app.history_view_mode, HistoryViewMode::Stats);
+        assert!(app.history_data.as_ref().unwrap().selected_game().is_none());
+    }
+}

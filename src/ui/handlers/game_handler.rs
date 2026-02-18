@@ -142,3 +142,165 @@ impl<'a> GameHandler<'a> {
 }
 
 use super::SolverHandler;
+
+#[cfg(test)]
+mod tests {
+    use super::super::super::{app::App, types::{GameMode, LogBuffer}};
+    use crate::solver::Feedback;
+    use sqlx::sqlite::SqlitePoolOptions;
+
+    /// Helper function to create a test database pool (in-memory SQLite).
+    async fn create_test_db_pool() -> sqlx::Pool<sqlx::Sqlite> {
+        let pool = SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect("sqlite::memory:")
+            .await
+            .expect("Failed to create test database pool");
+
+        // Run migrations
+        sqlx::migrate!("./migrations")
+            .run(&pool)
+            .await
+            .expect("Failed to run migrations on test database");
+
+        pool
+    }
+
+    /// Helper function to create a test app with a minimal word list.
+    async fn create_test_app() -> App {
+        let words = vec![
+            "raise".to_string(),
+            "stone".to_string(),
+            "slate".to_string(),
+            "crane".to_string(),
+            "house".to_string(),
+            "apple".to_string(),
+            "world".to_string(),
+            "magic".to_string(),
+        ];
+        let solution_words = words.clone();
+        let logs = LogBuffer::new();
+        let db_pool = create_test_db_pool().await;
+
+        App::new(words, solution_words, 5, logs, db_pool)
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_start_new_game() {
+        let mut app = create_test_app().await;
+
+        super::GameHandler::new(&mut app).start_new_game();
+
+        assert_eq!(app.mode, GameMode::Game);
+        assert!(app.target_word.is_some());
+        assert_eq!(app.remaining_guesses, 6);
+        assert!(!app.game_won);
+        assert!(!app.game_over);
+        assert!(!app.show_suggestions);
+        assert!(!app.show_analysis);
+        assert!(app.input.is_empty());
+        assert_eq!(app.solver.guesses().len(), 0);
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_toggle_game_mode_from_solver() {
+        let mut app = create_test_app().await;
+        app.mode = GameMode::Solver;
+
+        super::GameHandler::new(&mut app).toggle_game_mode();
+
+        assert_eq!(app.mode, GameMode::Game);
+        assert!(app.target_word.is_some());
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_toggle_game_mode_from_game() {
+        let mut app = create_test_app().await;
+        super::GameHandler::new(&mut app).start_new_game();
+
+        super::GameHandler::new(&mut app).toggle_game_mode();
+
+        assert_eq!(app.mode, GameMode::Solver);
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_check_game_state_won() {
+        let mut app = create_test_app().await;
+        app.mode = GameMode::Game;
+        app.target_word = Some("stone".to_string());
+
+        let all_green = vec![
+            Feedback::Green,
+            Feedback::Green,
+            Feedback::Green,
+            Feedback::Green,
+            Feedback::Green,
+        ];
+
+        super::GameHandler::new(&mut app).check_game_state(&all_green);
+
+        assert!(app.game_won);
+        assert!(app.game_over);
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_check_game_state_not_won() {
+        let mut app = create_test_app().await;
+        app.mode = GameMode::Game;
+        app.target_word = Some("stone".to_string());
+        app.remaining_guesses = 3;
+
+        let mixed = vec![
+            Feedback::Green,
+            Feedback::Yellow,
+            Feedback::Gray,
+            Feedback::Green,
+            Feedback::Gray,
+        ];
+
+        super::GameHandler::new(&mut app).check_game_state(&mixed);
+
+        assert!(!app.game_won);
+        assert!(!app.game_over);
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_check_game_state_out_of_guesses() {
+        let mut app = create_test_app().await;
+        app.mode = GameMode::Game;
+        app.target_word = Some("stone".to_string());
+        app.remaining_guesses = 0;
+
+        let mixed = vec![
+            Feedback::Green,
+            Feedback::Yellow,
+            Feedback::Gray,
+            Feedback::Green,
+            Feedback::Gray,
+        ];
+
+        super::GameHandler::new(&mut app).check_game_state(&mixed);
+
+        assert!(!app.game_won);
+        assert!(app.game_over);
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_game_state_resets_on_new_game() {
+        let mut app = create_test_app().await;
+
+        // Start first game
+        super::GameHandler::new(&mut app).start_new_game();
+        app.remaining_guesses = 2;
+        app.game_over = true;
+        app.game_won = true;
+
+        // Start new game
+        super::GameHandler::new(&mut app).start_new_game();
+
+        assert_eq!(app.remaining_guesses, 6);
+        assert!(!app.game_over);
+        assert!(!app.game_won);
+        assert_eq!(app.solver.guesses().len(), 0);
+    }
+}
