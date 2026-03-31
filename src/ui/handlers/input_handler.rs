@@ -321,8 +321,17 @@ impl<'a> InputHandler<'a> {
             // Using score difference as a proxy for entropy difference
             let score_deviation = actual_score as f64 - optimal_score as f64;
 
-            // Log with detailed solver session information
             if self.app.solver_session_active && !self.app.solver_session_paused {
+                let sg = crate::ui::history::solver_types::SolverGuess {
+                    word: word.clone(),
+                    pool_size_before,
+                    pool_size_after,
+                    entropy,
+                    optimal_word: optimal_word.clone(),
+                    optimal_entropy: entropy - score_deviation,
+                    deviation_score: score_deviation,
+                };
+                self.app.solver_session_guesses.push(sg);
                 self.app.log(format!(
                     "Solver guess: {} (pool: {}→{}, entropy: {:.2}, optimal: {}, deviation: {:.2})",
                     &word,
@@ -356,17 +365,25 @@ impl<'a> InputHandler<'a> {
         }
     }
 
-    /// Resets the solver state and starts a new session
     fn reset_solver_and_start_new_session(&mut self) {
-        let word_len = self.app.solver.word_len();
+        let timestamp = self
+            .app
+            .solver_session_start
+            .unwrap_or_else(chrono::Utc::now);
+        let guesses = std::mem::take(&mut self.app.solver_session_guesses);
+        if !guesses.is_empty()
+            && let Err(e) = self.app.db.save_solver_session(timestamp, &guesses)
+        {
+            self.app
+                .log(format!("Warning: failed to save solver session: {}", e));
+        }
 
-        // Clear solver state
+        let word_len = self.app.solver.word_len();
         self.app.solver = crate::solver::SolverState::new(word_len);
         self.app.entropy_history.clear();
         self.app.suggestions.clear();
         self.app.analysis_dirty = true;
 
-        // Start new session
         self.app.solver_session_active = true;
         self.app.solver_session_paused = false;
         self.app.solver_session_start = Some(chrono::Utc::now());

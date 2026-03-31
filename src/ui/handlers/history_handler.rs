@@ -1,6 +1,6 @@
 use super::super::{
     app::App,
-    history::{HistoryData, HistoryViewMode, parse_game_history, parse_solver_history},
+    history::{HistoryData, HistoryViewMode},
     types::GameMode,
 };
 
@@ -26,10 +26,7 @@ impl<'a> HistoryHandler<'a> {
             self.app.log("Solver session paused");
         }
 
-        // Load history if not already loaded
-        if self.app.history_data.is_none() {
-            self.load_history();
-        }
+        self.load_history();
     }
 
     /// Exit history mode and return to solver mode.
@@ -43,34 +40,27 @@ impl<'a> HistoryHandler<'a> {
         }
     }
 
-    /// Load and parse game history from log files.
     pub fn load_history(&mut self) {
         self.app.log("Loading game history...");
 
-        match parse_game_history("logs") {
-            Ok(games) => {
-                let game_count = games.len();
+        let games = self.app.db.load_games().unwrap_or_else(|e| {
+            self.app.log(format!("Failed to load games: {}", e));
+            Vec::new()
+        });
 
-                // Also load solver sessions
-                let sessions = parse_solver_history("logs").unwrap_or_else(|e| {
-                    self.app
-                        .log(format!("Warning: Failed to load solver history: {}", e));
-                    Vec::new()
-                });
-                let session_count = sessions.len();
+        let sessions = self.app.db.load_solver_sessions().unwrap_or_else(|e| {
+            self.app
+                .log(format!("Failed to load solver sessions: {}", e));
+            Vec::new()
+        });
 
-                self.app.history_data = Some(HistoryData::new(games, sessions));
-                self.app.log(format!(
-                    "Loaded {} game(s) and {} solver session(s) from history",
-                    game_count, session_count
-                ));
-            }
-            Err(e) => {
-                self.app.log(format!("Failed to load history: {}", e));
-                // Create empty history data so we can still show the UI
-                self.app.history_data = Some(HistoryData::new(Vec::new(), Vec::new()));
-            }
-        }
+        let game_count = games.len();
+        let session_count = sessions.len();
+        self.app.history_data = Some(HistoryData::new(games, sessions));
+        self.app.log(format!(
+            "Loaded {} game(s) and {} solver session(s) from history",
+            game_count, session_count
+        ));
     }
 
     /// Switch to the next view mode (Stats -> List -> Solver -> Stats).

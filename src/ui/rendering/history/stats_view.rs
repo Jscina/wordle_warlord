@@ -99,13 +99,6 @@ fn draw_overall_stats(f: &mut Frame, area: Rect, stats: &crate::ui::history::His
                 format!("{}", stats.losses),
                 Style::default().fg(Color::Red).add_modifier(Modifier::BOLD),
             ),
-            Span::raw("  |  Abandoned: "),
-            Span::styled(
-                format!("{}", stats.abandoned),
-                Style::default()
-                    .fg(Color::Gray)
-                    .add_modifier(Modifier::BOLD),
-            ),
         ]),
         Line::from(""),
         Line::from(vec![
@@ -207,13 +200,11 @@ fn draw_recent_games(f: &mut Frame, area: Rect, history_data: &crate::ui::histor
                     format!("Won in {}", guesses)
                 }
                 crate::ui::history::GameOutcome::Lost => "Lost".to_string(),
-                crate::ui::history::GameOutcome::Abandoned => "Abandoned".to_string(),
             };
 
             let outcome_style = match game.outcome {
                 crate::ui::history::GameOutcome::Won { .. } => Style::default().fg(Color::Green),
-                crate::ui::history::GameOutcome::Lost
-                | crate::ui::history::GameOutcome::Abandoned => Style::default().fg(Color::Red),
+                crate::ui::history::GameOutcome::Lost => Style::default().fg(Color::Red),
             };
 
             Row::new(vec![date, game.target_word.clone(), outcome]).style(outcome_style)

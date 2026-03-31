@@ -1,15 +1,13 @@
 use std::{collections::HashSet, fmt::Display, io::Stdout};
 
-use anyhow::Result;
-use chrono::{DateTime, Utc};
-use crossterm::event::{self, Event};
-use ratatui::{Terminal, backend::CrosstermBackend};
-use tracing::info;
-
 use crate::{
     analysis::{ConstraintSummary, LetterAnalysis, PositionAnalysis, SolutionPoolStats},
     solver::SolverState,
 };
+use anyhow::Result;
+use chrono::{DateTime, Utc};
+use crossterm::event::{self, Event};
+use ratatui::{Terminal, backend::CrosstermBackend};
 
 use super::{
     history::{HistoryData, HistoryViewMode},
@@ -43,6 +41,8 @@ pub struct App {
     pub(in crate::ui) solver_session_active: bool,
     pub(in crate::ui) solver_session_start: Option<DateTime<Utc>>,
     pub(in crate::ui) solver_session_paused: bool,
+    pub(in crate::ui) db: crate::storage::Database,
+    pub(in crate::ui) solver_session_guesses: Vec<crate::ui::history::solver_types::SolverGuess>,
 }
 
 impl App {
@@ -51,6 +51,7 @@ impl App {
         solution_words: Vec<String>,
         word_len: usize,
         logs: LogBuffer,
+        db: crate::storage::Database,
     ) -> Self {
         let allowed_lookup: HashSet<String> = words.iter().cloned().collect();
 
@@ -77,14 +78,15 @@ impl App {
             history_data: None,
             history_view_mode: HistoryViewMode::Stats,
             history_page: 0,
-            solver_session_active: true, // Start with session active since we're in Solver mode
+            solver_session_active: true,
             solver_session_start: Some(Utc::now()),
             solver_session_paused: false,
+            db,
+            solver_session_guesses: Vec::new(),
         }
     }
 
     pub fn run(&mut self, terminal: &mut Terminal<CrosstermBackend<Stdout>>) -> Result<()> {
-        info!("UI started");
         self.log("UI started");
 
         // Log solver session start (app starts in Solver mode)

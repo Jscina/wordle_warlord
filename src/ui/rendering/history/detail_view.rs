@@ -53,13 +53,11 @@ fn draw_game_header(f: &mut Frame, area: Rect, game: &crate::ui::history::GameRe
             format!("Won in {} guess(es)", guesses)
         }
         crate::ui::history::GameOutcome::Lost => "Lost (ran out of guesses)".to_string(),
-        crate::ui::history::GameOutcome::Abandoned => "Abandoned (incomplete)".to_string(),
     };
 
     let outcome_color = match game.outcome {
         crate::ui::history::GameOutcome::Won { .. } => Color::Green,
         crate::ui::history::GameOutcome::Lost => Color::Red,
-        crate::ui::history::GameOutcome::Abandoned => Color::Gray,
     };
 
     let lines = vec![

@@ -23,5 +23,6 @@ fn init_logging() {
 
 fn main() -> Result<()> {
     init_logging();
-    ui::run_ui()
+    let db = wordle_warlord::storage::Database::open("history.db")?;
+    ui::run_ui(db)
 }

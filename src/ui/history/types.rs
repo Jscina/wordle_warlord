@@ -6,12 +6,11 @@ use crate::solver::Feedback;
 
 use super::solver_types::{SolverSession, SolverStats};
 
-/// Outcome of a completed or abandoned game.
+/// Outcome of a completed game.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum GameOutcome {
     Won { guesses: usize },
     Lost,
-    Abandoned,
 }
 
 /// A single guess within a game.
@@ -48,12 +47,11 @@ pub struct HistoryStats {
     pub total_games: usize,
     pub wins: usize,
     pub losses: usize,
-    pub abandoned: usize,
     pub win_rate: f64,
     pub average_guesses: f64,
-    pub current_streak: i32, // Positive for wins, negative for losses
+    pub current_streak: i32,
     pub best_win_streak: usize,
-    pub guess_distribution: [usize; 6], // Count of wins by guess number (1-6)
+    pub guess_distribution: [usize; 6],
 }
 
 impl HistoryStats {
@@ -79,12 +77,10 @@ impl HistoryStats {
                     stats.wins += 1;
                     total_guesses_for_wins += guesses;
 
-                    // Update guess distribution (1-indexed to 0-indexed)
                     if (1..=6).contains(&guesses) {
                         stats.guess_distribution[guesses - 1] += 1;
                     }
 
-                    // Update streaks
                     if current_streak >= 0 {
                         current_streak += 1;
                     } else {
@@ -93,14 +89,9 @@ impl HistoryStats {
                     current_win_streak += 1;
                     best_win_streak = best_win_streak.max(current_win_streak);
                 }
-                GameOutcome::Lost | GameOutcome::Abandoned => {
-                    if game.was_lost() {
-                        stats.losses += 1;
-                    } else {
-                        stats.abandoned += 1;
-                    }
+                GameOutcome::Lost => {
+                    stats.losses += 1;
 
-                    // Update streaks
                     if current_streak <= 0 {
                         current_streak -= 1;
                     } else {
@@ -114,7 +105,6 @@ impl HistoryStats {
         stats.current_streak = current_streak;
         stats.best_win_streak = best_win_streak;
 
-        // Calculate win rate excluding abandoned games
         let completed_games = stats.wins + stats.losses;
         if completed_games > 0 {
             stats.win_rate = (stats.wins as f64 / completed_games as f64) * 100.0;

@@ -43,7 +43,6 @@ impl App {
                     let outcome = match game.outcome {
                         crate::ui::history::GameOutcome::Won { .. } => "Won",
                         crate::ui::history::GameOutcome::Lost => "Lost",
-                        crate::ui::history::GameOutcome::Abandoned => "Abandoned",
                     };
 
                     let outcome_style = match game.outcome {
@@ -51,9 +50,6 @@ impl App {
                             Style::default().fg(Color::Green)
                         }
                         crate::ui::history::GameOutcome::Lost => Style::default().fg(Color::Red),
-                        crate::ui::history::GameOutcome::Abandoned => {
-                            Style::default().fg(Color::Gray)
-                        }
                     };
 
                     // Show number for selection (1-10)

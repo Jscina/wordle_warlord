@@ -6,7 +6,6 @@ use super::{
 };
 use crate::solver::{Feedback, Guess};
 
-/// Helper function to create a test app with a minimal word list.
 fn create_test_app() -> App {
     let words = vec![
         "raise".to_string(),
@@ -20,8 +19,8 @@ fn create_test_app() -> App {
     ];
     let solution_words = words.clone();
     let logs = LogBuffer::new();
-
-    App::new(words, solution_words, 5, logs)
+    let db = crate::storage::Database::open_memory().expect("failed to create in-memory test db");
+    App::new(words, solution_words, 5, logs, db)
 }
 
 #[cfg(test)]

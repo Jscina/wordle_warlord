@@ -5,18 +5,13 @@ use chrono::{DateTime, Utc};
 /// A single guess within a solver session
 #[derive(Debug, Clone)]
 pub struct SolverGuess {
-    #[allow(dead_code)]
     pub word: String,
-    #[allow(dead_code)]
     pub pool_size_before: usize,
-    #[allow(dead_code)]
     pub pool_size_after: usize,
     pub entropy: f64,
-    #[allow(dead_code)]
-    pub optimal_word: String, // Best choice at this step
-    #[allow(dead_code)]
-    pub optimal_entropy: f64, // Entropy of optimal choice
-    pub deviation_score: f64, // Entropy difference (actual - optimal)
+    pub optimal_word: String,
+    pub optimal_entropy: f64,
+    pub deviation_score: f64,
 }
 
 impl SolverGuess {
@@ -30,7 +25,6 @@ impl SolverGuess {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SolverOutcome {
     Completed { guesses: usize },
-    Abandoned,
 }
 
 /// A complete solver session record
@@ -80,11 +74,10 @@ impl SolverSession {
 pub struct SolverStats {
     pub total_sessions: usize,
     pub completed_sessions: usize,
-    pub abandoned_sessions: usize,
     pub average_guesses: f64,
     pub average_entropy: f64,
-    pub optimal_adherence: f64, // % of all guesses that were optimal
-    pub average_deviation: f64, // Average entropy loss from optimal
+    pub optimal_adherence: f64,
+    pub average_deviation: f64,
 }
 
 impl SolverStats {
@@ -110,9 +103,6 @@ impl SolverStats {
                 SolverOutcome::Completed { guesses } => {
                     stats.completed_sessions += 1;
                     total_guesses += guesses;
-                }
-                SolverOutcome::Abandoned => {
-                    stats.abandoned_sessions += 1;
                 }
             }
 

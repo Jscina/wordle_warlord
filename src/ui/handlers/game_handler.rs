@@ -4,7 +4,7 @@ use crate::{
 };
 use chrono::Utc;
 
-use super::super::{app::App, types::GameMode};
+use super::super::{app::App, history::GameOutcome, types::GameMode};
 
 /// Helper struct for managing game-specific state transitions.
 pub struct GameHandler<'a> {
@@ -20,12 +20,12 @@ impl<'a> GameHandler<'a> {
         if self.app.mode == GameMode::Solver {
             self.app.log("Starting new game");
 
-            // End any active solver session
             if self.app.solver_session_active {
                 self.app.log("Solver session abandoned");
                 self.app.solver_session_active = false;
                 self.app.solver_session_start = None;
-                self.app.solver_session_paused = false; // Reset pause state
+                self.app.solver_session_paused = false;
+                self.app.solver_session_guesses.clear();
             }
 
             self.start_new_game();
@@ -68,7 +68,6 @@ impl<'a> GameHandler<'a> {
     }
 
     pub fn check_game_state(&mut self, feedback: &[Feedback]) {
-        // Check if won (all green)
         if feedback.iter().all(|&fb| fb == Feedback::Green) {
             self.app.log(format!(
                 "Target word was {}",
@@ -77,13 +76,25 @@ impl<'a> GameHandler<'a> {
             self.app.log("Game won!");
             self.app.game_won = true;
             self.app.game_over = true;
+            let guesses = self.app.solver.guesses().len();
+            self.save_completed_game(GameOutcome::Won { guesses });
             return;
         }
 
-        // Check if out of guesses
         if self.app.remaining_guesses == 0 {
             self.app.log("Game over: out of guesses");
             self.app.game_over = true;
+            self.save_completed_game(GameOutcome::Lost);
+        }
+    }
+
+    fn save_completed_game(&mut self, outcome: GameOutcome) {
+        if let Some(ref target) = self.app.target_word.clone() {
+            let guesses: Vec<_> = self.app.solver.guesses().to_vec();
+            let timestamp = Utc::now();
+            if let Err(e) = self.app.db.save_game(timestamp, target, &guesses, &outcome) {
+                self.app.log(format!("Warning: failed to save game: {}", e));
+            }
         }
     }
 }

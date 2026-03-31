@@ -86,13 +86,6 @@ fn draw_solver_stats(f: &mut Frame, area: Rect, stats: &crate::ui::history::Solv
                     .fg(Color::Green)
                     .add_modifier(Modifier::BOLD),
             ),
-            Span::raw("  |  Abandoned: "),
-            Span::styled(
-                format!("{}", stats.abandoned_sessions),
-                Style::default()
-                    .fg(Color::Gray)
-                    .add_modifier(Modifier::BOLD),
-            ),
         ]),
         Line::from(""),
         Line::from(vec![
@@ -207,14 +200,12 @@ fn draw_recent_sessions(f: &mut Frame, area: Rect, history_data: &crate::ui::his
             let deviation = format!("{:.2}", session.average_deviation());
             let outcome = match session.outcome {
                 crate::ui::history::SolverOutcome::Completed { .. } => "Completed",
-                crate::ui::history::SolverOutcome::Abandoned => "Abandoned",
             };
 
             let outcome_style = match session.outcome {
                 crate::ui::history::SolverOutcome::Completed { .. } => {
                     Style::default().fg(Color::Green)
                 }
-                crate::ui::history::SolverOutcome::Abandoned => Style::default().fg(Color::Gray),
             };
 
             Row::new(vec![
