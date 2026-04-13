@@ -2,7 +2,6 @@
 
 [![CI](https://github.com/Jscina/wordle_grep/actions/workflows/ci.yml/badge.svg)](https://github.com/Jscina/wordle_grep/actions/workflows/ci.yml)
 [![Release](https://github.com/Jscina/wordle_grep/actions/workflows/release.yml/badge.svg)](https://github.com/Jscina/wordle_grep/actions/workflows/release.yml)
-[![Security Audit](https://github.com/Jscina/wordle_grep/actions/workflows/audit.yml/badge.svg)](https://github.com/Jscina/wordle_grep/actions/workflows/audit.yml)
 
 A Wordle solver **and** local Wordle game written in Rust, with an interactive terminal UI and game history tracking.
 
